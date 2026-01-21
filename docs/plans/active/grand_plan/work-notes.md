@@ -137,13 +137,28 @@ Fixed SOPS 3.11 issue requiring `--config /dev/null` for explicit `--age` flag u
 
 ### Phase 3: Brev Instance + K3S
 
-**Status**: Pending
-**Started**:
-**Completed**:
+**Status**: Complete ✓
+**Started**: 2026-01-21
+**Completed**: 2026-01-21
 
 #### Notes
 
-Will use `/brev create brev-data-platform-dev -g "..."` to create instance.
+Created Brev instance with T4 GPU (A100 wasn't available):
+- Instance: `brev-data-platform-dev`
+- GPU: `n1-highmem-4:nvidia-tesla-t4:1` (T4 15GB)
+- IP: 34.70.120.3 (internal GCP)
+
+K3S v1.34.3+k3s1 installed with:
+- NVIDIA device plugin running
+- GPU resource visible: `nvidia.com/gpu: 1`
+- All 6 namespaces created (argocd, minio, lakefs, dagster, marimo, nvidia-ai)
+
+Kubeconfig access via SSH tunnel:
+```bash
+ssh -F ~/.brev/ssh_config -N -L 6443:127.0.0.1:6443 brev-data-platform-dev-host &
+export KUBECONFIG=$PWD/kubeconfig.yaml
+kubectl get nodes
+```
 
 ---
 
