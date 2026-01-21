@@ -1,0 +1,26 @@
+# NVIDIA Safe Synthesizer Application - Synthetic Data Generation
+# Sync Wave 3: AI Layer
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: nvidia-safe-synth
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/aerugo/brev-data-platform.git
+    targetRevision: main
+    path: k8s/apps/nvidia-safe-synth
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: nvidia-ai
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

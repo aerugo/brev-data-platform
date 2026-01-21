@@ -1,4 +1,4 @@
-# Phase 6: Data Platform (Dagster + Marimo)
+# Phase 5: Storage Layer (MinIO + LakeFS)
 
 **Status**: Pending
 **Started**:
@@ -8,672 +8,454 @@
 
 ## Objective
 
-Deploy Dagster for data pipeline orchestration and Marimo for interactive notebooks. Configure both to connect to MinIO and LakeFS from Phase 5.
+Deploy MinIO for S3-compatible object storage and LakeFS for Git-like data versioning. Create the foundational buckets and repositories for the data platform.
 
 ---
 
 ## Invariants Enforced in This Phase
 
-- **INV-K001**: Namespace per application - Dagster in `dagster`, Marimo in `marimo`
+- **INV-K001**: Namespace per application - MinIO in `minio`, LakeFS in `lakefs`
 - **INV-K002**: Resource limits on all pods
 - **INV-K005**: No `latest` image tags
-- **INV-P001**: Assets over ops - Dagster pipeline uses `@asset` pattern
-- **INV-P002**: I/O managers for storage - LakeFS I/O manager configured
-- **INV-P003**: Type annotations on assets
-- **NEW INV-K006**: Sync wave ordering - Platform (wave 2) after Storage (wave 1)
+- **INV-S004**: MinIO credentials encrypted
+- **INV-D001**: Standard bucket structure - `raw-data`, `data-products`, `lakefs`
+- **INV-G004**: Sync waves for dependencies - MinIO (wave 1) before LakeFS (wave 1)
 
 ---
 
 ## Files to Create
 
-### Dagster Helm Chart
+### MinIO
 
-#### k8s/apps/dagster/Chart.yaml
+#### k8s/apps/minio/Chart.yaml
 
 ```yaml
 apiVersion: v2
-name: dagster
-description: Dagster pipeline orchestration for brev-data-platform
+name: minio
+description: MinIO object storage for brev-data-platform
 type: application
 version: 0.1.0
-appVersion: "1.6.0"
+appVersion: "RELEASE.2024-01-16T16-07-38Z"
 
 dependencies:
-  - name: dagster
-    version: 1.6.0
-    repository: https://dagster-io.github.io/helm
+  - name: minio
+    version: 5.0.15
+    repository: https://charts.min.io/
 ```
 
-#### k8s/apps/dagster/values.yaml
+#### k8s/apps/minio/values.yaml
 
 ```yaml
-# Dagster default values
+# MinIO default values
 
-dagster:
-  # Global settings
-  global:
-    serviceAccountName: dagster
+minio:
+  # Mode: standalone for dev
+  mode: standalone
 
-  # PostgreSQL for run storage (embedded for dev)
-  postgresql:
+  # Image
+  image:
+    repository: quay.io/minio/minio
+    tag: RELEASE.2024-01-16T16-07-38Z
+    pullPolicy: IfNotPresent
+
+  # Resources
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+
+  # Persistence
+  persistence:
     enabled: true
-    postgresqlUsername: dagster
-    postgresqlPassword: dagster
-    postgresqlDatabase: dagster
-    persistence:
-      enabled: true
-      size: 10Gi
-      storageClass: local-path
+    size: 100Gi
+    storageClass: local-path  # K3S default
 
-  # Dagster webserver
-  dagsterWebserver:
-    replicaCount: 1
-    image:
-      repository: dagster/dagster-celery-k8s
-      tag: 1.6.0
-      pullPolicy: IfNotPresent
-    resources:
-      requests:
-        cpu: 250m
-        memory: 512Mi
-      limits:
-        cpu: 1000m
-        memory: 2Gi
-    service:
-      type: ClusterIP
-      port: 3000
+  # Root credentials from secret
+  existingSecret: minio-credentials
+  accessKey: ""  # From secret
+  secretKey: ""  # From secret
 
-  # Dagster daemon
-  dagsterDaemon:
-    enabled: true
-    image:
-      repository: dagster/dagster-celery-k8s
-      tag: 1.6.0
-    resources:
-      requests:
-        cpu: 250m
-        memory: 512Mi
-      limits:
-        cpu: 1000m
-        memory: 2Gi
+  # Console
+  consoleService:
+    type: ClusterIP
+    port: 9001
 
-  # User code deployments
-  dagsterUserDeployments:
-    enabled: true
-    deployments:
-      - name: brev-pipelines
-        image:
-          repository: ghcr.io/YOUR_ORG/brev-data-platform/dagster
-          tag: latest  # Will be updated by CI
-          pullPolicy: Always
-        dagsterApiGrpcArgs:
-          - "--python-file"
-          - "/opt/dagster/app/definitions.py"
-        port: 3030
-        envSecrets:
-          - name: dagster-env-secrets
-        resources:
-          requests:
-            cpu: 250m
-            memory: 512Mi
-          limits:
-            cpu: 2000m
-            memory: 4Gi
+  # API
+  service:
+    type: ClusterIP
+    port: 9000
 
-  # Run launcher config
-  runLauncher:
-    type: K8sRunLauncher
-    config:
-      k8sRunLauncher:
-        envSecrets:
-          - name: dagster-env-secrets
+  # Buckets to create on startup
+  buckets:
+    - name: raw-data
+      policy: none
+      purge: false
+    - name: data-products
+      policy: none
+      purge: false
+    - name: lakefs
+      policy: none
+      purge: false
 
-  # No ingress
+  # No ingress (use port-forward)
   ingress:
+    enabled: false
+  consoleIngress:
     enabled: false
 ```
 
-#### k8s/apps/dagster/values-dev.yaml
+#### k8s/apps/minio/values-dev.yaml
 
 ```yaml
 # Dev environment overrides
 
-dagster:
-  postgresql:
-    persistence:
-      size: 5Gi
+minio:
+  persistence:
+    size: 50Gi  # Smaller for dev
 
-  dagsterWebserver:
-    resources:
-      requests:
-        cpu: 100m
-        memory: 256Mi
-      limits:
-        cpu: 500m
-        memory: 1Gi
-
-  dagsterDaemon:
-    resources:
-      requests:
-        cpu: 100m
-        memory: 256Mi
-      limits:
-        cpu: 500m
-        memory: 1Gi
-
-  dagsterUserDeployments:
-    deployments:
-      - name: brev-pipelines
-        image:
-          repository: ghcr.io/YOUR_ORG/brev-data-platform/dagster
-          tag: dev
-        resources:
-          requests:
-            cpu: 100m
-            memory: 256Mi
-          limits:
-            cpu: 1000m
-            memory: 2Gi
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
 ```
 
-### Dagster Pipeline Code
+#### k8s/apps/minio/templates/secret.yaml
 
-#### dagster/Dockerfile
-
-```dockerfile
-FROM python:3.11-slim
-
-WORKDIR /opt/dagster/app
-
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install Python dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy application code
-COPY . .
-
-# Expose gRPC port
-EXPOSE 3030
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD python -c "import dagster; print('ok')"
+```yaml
+# Placeholder - actual secret is SOPS encrypted
+# This tells ArgoCD to expect the secret from secrets.enc.yaml
+{{- if not (lookup "v1" "Secret" .Release.Namespace "minio-credentials") }}
+# Secret will be created from secrets.enc.yaml
+{{- end }}
 ```
 
-#### dagster/requirements.txt
+### LakeFS
 
-```
-dagster==1.6.0
-dagster-postgres==0.22.0
-dagster-k8s==0.22.0
-pandas>=2.0.0
-pyarrow>=14.0.0
-boto3>=1.34.0
-requests>=2.31.0
-lakefs-sdk>=0.6.0
-```
-
-#### dagster/definitions.py
-
-```python
-"""Dagster definitions for brev-data-platform."""
-
-from dagster import Definitions, EnvVar
-
-from assets.ingestion import raw_data_assets
-from assets.transformation import transformed_data_assets
-from io_managers.lakefs_io_manager import lakefs_parquet_io_manager
-from resources.lakefs import LakeFSResource
-from resources.minio import MinIOResource
-
-defs = Definitions(
-    assets=[
-        *raw_data_assets,
-        *transformed_data_assets,
-    ],
-    resources={
-        "lakefs": LakeFSResource(
-            endpoint=EnvVar("LAKEFS_ENDPOINT"),
-            access_key_id=EnvVar("LAKEFS_ACCESS_KEY_ID"),
-            secret_access_key=EnvVar("LAKEFS_SECRET_ACCESS_KEY"),
-        ),
-        "minio": MinIOResource(
-            endpoint=EnvVar("MINIO_ENDPOINT"),
-            access_key=EnvVar("MINIO_ACCESS_KEY"),
-            secret_key=EnvVar("MINIO_SECRET_KEY"),
-        ),
-        "lakefs_parquet_io_manager": lakefs_parquet_io_manager.configured({
-            "repository": "main-repo",
-            "branch": "main",
-        }),
-    },
-)
-```
-
-#### dagster/assets/__init__.py
-
-```python
-"""Dagster assets package."""
-```
-
-#### dagster/assets/ingestion.py
-
-```python
-"""Data ingestion assets."""
-
-from dagster import asset, AssetExecutionContext
-import pandas as pd
-
-@asset(
-    description="Sample raw data for testing",
-    group_name="ingestion",
-    io_manager_key="lakefs_parquet_io_manager",
-)
-def sample_raw_data(context: AssetExecutionContext) -> pd.DataFrame:
-    """Generate sample raw data for testing the pipeline."""
-    context.log.info("Generating sample raw data")
-
-    df = pd.DataFrame({
-        "id": range(1, 101),
-        "name": [f"Item {i}" for i in range(1, 101)],
-        "value": [i * 10.5 for i in range(1, 101)],
-        "category": ["A", "B", "C", "D"] * 25,
-    })
-
-    context.log.info(f"Generated {len(df)} rows of sample data")
-    return df
-
-raw_data_assets = [sample_raw_data]
-```
-
-#### dagster/assets/transformation.py
-
-```python
-"""Data transformation assets."""
-
-from dagster import asset, AssetExecutionContext
-import pandas as pd
-
-@asset(
-    description="Transformed and enriched data",
-    group_name="transformation",
-    io_manager_key="lakefs_parquet_io_manager",
-    deps=["sample_raw_data"],
-)
-def transformed_data(
-    context: AssetExecutionContext,
-    sample_raw_data: pd.DataFrame,
-) -> pd.DataFrame:
-    """Transform raw data with aggregations."""
-    context.log.info(f"Transforming {len(sample_raw_data)} rows")
-
-    # Add computed columns
-    df = sample_raw_data.copy()
-    df["value_normalized"] = df["value"] / df["value"].max()
-    df["category_count"] = df.groupby("category")["id"].transform("count")
-
-    context.log.info(f"Transformation complete: {len(df)} rows")
-    return df
-
-transformed_data_assets = [transformed_data]
-```
-
-#### dagster/resources/__init__.py
-
-```python
-"""Dagster resources package."""
-```
-
-#### dagster/resources/lakefs.py
-
-```python
-"""LakeFS resource for Dagster."""
-
-from dagster import ConfigurableResource
-import lakefs_sdk
-from lakefs_sdk.client import LakeFSClient
-
-class LakeFSResource(ConfigurableResource):
-    """Resource for interacting with LakeFS."""
-
-    endpoint: str
-    access_key_id: str
-    secret_access_key: str
-
-    def get_client(self) -> LakeFSClient:
-        """Get configured LakeFS client."""
-        configuration = lakefs_sdk.Configuration(
-            host=self.endpoint,
-            username=self.access_key_id,
-            password=self.secret_access_key,
-        )
-        return LakeFSClient(configuration)
-```
-
-#### dagster/resources/minio.py
-
-```python
-"""MinIO resource for Dagster."""
-
-from dagster import ConfigurableResource
-import boto3
-
-class MinIOResource(ConfigurableResource):
-    """Resource for interacting with MinIO."""
-
-    endpoint: str
-    access_key: str
-    secret_key: str
-
-    def get_client(self):
-        """Get configured S3 client for MinIO."""
-        return boto3.client(
-            "s3",
-            endpoint_url=f"http://{self.endpoint}",
-            aws_access_key_id=self.access_key,
-            aws_secret_access_key=self.secret_key,
-        )
-```
-
-#### dagster/io_managers/__init__.py
-
-```python
-"""Dagster I/O managers package."""
-```
-
-#### dagster/io_managers/lakefs_io_manager.py
-
-```python
-"""LakeFS Parquet I/O Manager for Dagster."""
-
-from dagster import IOManager, InputContext, OutputContext, io_manager
-import pandas as pd
-import io
-
-class LakeFSParquetIOManager(IOManager):
-    """I/O Manager that stores DataFrames as Parquet in LakeFS."""
-
-    def __init__(self, lakefs_resource, repository: str, branch: str):
-        self.lakefs = lakefs_resource
-        self.repository = repository
-        self.branch = branch
-
-    def _get_path(self, context) -> str:
-        """Generate storage path from asset key."""
-        return f"assets/{'/'.join(context.asset_key.path)}.parquet"
-
-    def handle_output(self, context: OutputContext, obj: pd.DataFrame) -> None:
-        """Write DataFrame to LakeFS as Parquet."""
-        if obj is None:
-            return
-
-        path = self._get_path(context)
-        client = self.lakefs.get_client()
-
-        # Write to buffer
-        buffer = io.BytesIO()
-        obj.to_parquet(buffer, index=False)
-        buffer.seek(0)
-
-        # Upload to LakeFS
-        client.objects_api.upload_object(
-            repository=self.repository,
-            branch=self.branch,
-            path=path,
-            content=buffer.read(),
-        )
-
-        context.log.info(f"Wrote {len(obj)} rows to lakefs://{self.repository}/{self.branch}/{path}")
-
-    def load_input(self, context: InputContext) -> pd.DataFrame:
-        """Load DataFrame from LakeFS Parquet file."""
-        path = self._get_path(context)
-        client = self.lakefs.get_client()
-
-        # Download from LakeFS
-        response = client.objects_api.get_object(
-            repository=self.repository,
-            ref=self.branch,
-            path=path,
-        )
-
-        return pd.read_parquet(io.BytesIO(response))
-
-@io_manager(config_schema={"repository": str, "branch": str}, required_resource_keys={"lakefs"})
-def lakefs_parquet_io_manager(context):
-    """Factory for LakeFS Parquet I/O Manager."""
-    return LakeFSParquetIOManager(
-        lakefs_resource=context.resources.lakefs,
-        repository=context.resource_config["repository"],
-        branch=context.resource_config["branch"],
-    )
-```
-
-### Marimo
-
-#### k8s/apps/marimo/Chart.yaml
+#### k8s/apps/lakefs/Chart.yaml
 
 ```yaml
 apiVersion: v2
-name: marimo
-description: Marimo interactive notebooks for brev-data-platform
+name: lakefs
+description: LakeFS data versioning for brev-data-platform
 type: application
 version: 0.1.0
-appVersion: "0.3.0"
+appVersion: "1.3.1"
+
+dependencies:
+  - name: lakefs
+    version: 1.0.0
+    repository: https://charts.lakefs.io
 ```
 
-#### k8s/apps/marimo/values.yaml
+#### k8s/apps/lakefs/values.yaml
 
 ```yaml
-# Marimo default values
+# LakeFS default values
 
-image:
-  repository: marimo-team/marimo
-  tag: "0.3.0"
-  pullPolicy: IfNotPresent
+lakefs:
+  # Image
+  image:
+    repository: treeverse/lakefs
+    tag: "1.3.1"
+    pullPolicy: IfNotPresent
 
-replicaCount: 1
+  # Resources
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
 
-resources:
-  requests:
-    cpu: 250m
-    memory: 512Mi
-  limits:
-    cpu: 1000m
-    memory: 2Gi
+  # Service
+  service:
+    type: ClusterIP
+    port: 8000
 
-service:
-  type: ClusterIP
-  port: 2718
+  # Liveness/readiness
+  livenessProbe:
+    enabled: true
+  readinessProbe:
+    enabled: true
 
-# Environment variables for data access
-env:
-  - name: MINIO_ENDPOINT
-    valueFrom:
-      secretKeyRef:
-        name: marimo-env-secrets
-        key: MINIO_ENDPOINT
-  - name: LAKEFS_ENDPOINT
-    valueFrom:
-      secretKeyRef:
-        name: marimo-env-secrets
-        key: LAKEFS_ENDPOINT
+  # Configuration
+  configuration:
+    database:
+      type: local  # Embedded database for dev
+      local:
+        path: /lakefs/data
 
-# Mount notebooks from ConfigMap or PVC
-persistence:
-  enabled: true
-  size: 5Gi
-  storageClass: local-path
+    blockstore:
+      type: s3
+      s3:
+        endpoint: http://minio.minio.svc.cluster.local:9000
+        force_path_style: true
+        # Credentials from env vars (populated from secret)
+
+    auth:
+      # Initial admin user
+      encrypt:
+        secret_key: "$(LAKEFS_AUTH_ENCRYPT_SECRET_KEY)"
+
+  # Environment from secret
+  extraEnvFrom:
+    - secretRef:
+        name: lakefs-credentials
+
+  # Persistence for embedded DB
+  persistence:
+    enabled: true
+    size: 10Gi
+    storageClass: local-path
+
+  # No ingress
+  ingress:
+    enabled: false
+
+  # Init container to wait for MinIO
+  initContainers:
+    - name: wait-for-minio
+      image: busybox:1.36
+      command:
+        - sh
+        - -c
+        - |
+          until nc -z minio.minio.svc.cluster.local 9000; do
+            echo "Waiting for MinIO..."
+            sleep 5
+          done
+          echo "MinIO is ready!"
 ```
 
-#### k8s/apps/marimo/templates/deployment.yaml
+#### k8s/apps/lakefs/values-dev.yaml
 
 ```yaml
-apiVersion: apps/v1
-kind: Deployment
+# Dev environment overrides
+
+lakefs:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+  persistence:
+    size: 5Gi
+```
+
+#### k8s/apps/lakefs/templates/setup-job.yaml
+
+```yaml
+# Job to create initial repository after LakeFS is ready
+apiVersion: batch/v1
+kind: Job
 metadata:
-  name: marimo
-  labels:
-    app: marimo
+  name: lakefs-setup
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "10"
+    helm.sh/hook-delete-policy: hook-succeeded
 spec:
-  replicas: {{ .Values.replicaCount }}
-  selector:
-    matchLabels:
-      app: marimo
   template:
-    metadata:
-      labels:
-        app: marimo
     spec:
+      restartPolicy: OnFailure
       containers:
-        - name: marimo
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
+        - name: setup
+          image: curlimages/curl:8.5.0
           command:
-            - marimo
-            - edit
-            - --host=0.0.0.0
-            - --port=2718
-            - --no-token
-            - /notebooks
-          ports:
-            - containerPort: 2718
-              name: http
-          resources:
-            {{- toYaml .Values.resources | nindent 12 }}
+            - sh
+            - -c
+            - |
+              echo "Waiting for LakeFS to be ready..."
+              until curl -sf http://lakefs.lakefs.svc.cluster.local:8000/_health; do
+                sleep 5
+              done
+
+              echo "Creating initial repository..."
+              curl -X POST http://lakefs.lakefs.svc.cluster.local:8000/api/v1/repositories \
+                -H "Content-Type: application/json" \
+                -u "${LAKEFS_ACCESS_KEY_ID}:${LAKEFS_SECRET_ACCESS_KEY}" \
+                -d '{
+                  "name": "main-repo",
+                  "storage_namespace": "s3://lakefs/main-repo",
+                  "default_branch": "main"
+                }' || echo "Repository may already exist"
+
+              echo "Setup complete!"
           envFrom:
             - secretRef:
-                name: marimo-env-secrets
-          volumeMounts:
-            - name: notebooks
-              mountPath: /notebooks
-      volumes:
-        - name: notebooks
-          persistentVolumeClaim:
-            claimName: marimo-notebooks
-```
-
-#### k8s/apps/marimo/templates/service.yaml
-
-```yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: marimo
-spec:
-  type: {{ .Values.service.type }}
-  ports:
-    - port: {{ .Values.service.port }}
-      targetPort: http
-      protocol: TCP
-      name: http
-  selector:
-    app: marimo
+                name: lakefs-credentials
 ```
 
 ---
 
-## Step 6.1: Build and Push Dagster Image
+## Step 5.1: Update Helm Dependencies
 
 ```bash
-# Build locally
-make build-dagster
+# Update MinIO chart
+cd k8s/apps/minio
+helm dependency update
+cd ../../..
 
-# Tag and push to GitHub Container Registry
-docker tag brev-data-platform/dagster:latest ghcr.io/YOUR_ORG/brev-data-platform/dagster:dev
-docker push ghcr.io/YOUR_ORG/brev-data-platform/dagster:dev
+# Update LakeFS chart
+cd k8s/apps/lakefs
+helm dependency update
+cd ../../..
 ```
 
 ---
 
-## Step 6.2: Apply Secrets
+## Step 5.2: Apply Secrets
 
 ```bash
-# Apply Dagster secrets
-sops -d k8s/apps/dagster/secrets.enc.yaml | kubectl apply -f -
+# Apply MinIO secrets
+sops -d k8s/apps/minio/secrets.enc.yaml | kubectl apply -f -
 
-# Create Marimo secrets (similar to Dagster)
-# ... (create marimo secrets.enc.yaml with same pattern)
-sops -d k8s/apps/marimo/secrets.enc.yaml | kubectl apply -f -
+# Apply LakeFS secrets
+sops -d k8s/apps/lakefs/secrets.enc.yaml | kubectl apply -f -
 ```
 
 ---
 
-## Step 6.3: Deploy via ArgoCD
+## Step 5.3: Deploy via ArgoCD
 
-Push and let ArgoCD sync, or manually deploy:
+If ArgoCD is configured, push to git and let it sync:
 
 ```bash
-# Update Helm dependencies
-cd k8s/apps/dagster && helm dependency update && cd ../../..
+git add k8s/apps/minio k8s/apps/lakefs
+git commit -m "Add MinIO and LakeFS charts"
+git push
 
-# Deploy Dagster
-helm upgrade --install dagster k8s/apps/dagster \
-  -n dagster \
-  -f k8s/apps/dagster/values.yaml \
-  -f k8s/apps/dagster/values-dev.yaml
+# ArgoCD will auto-sync, or force sync:
+kubectl patch application minio -n argocd --type merge -p '{"operation":{"initiatedBy":{"username":"admin"},"sync":{}}}'
+kubectl patch application lakefs -n argocd --type merge -p '{"operation":{"initiatedBy":{"username":"admin"},"sync":{}}}'
+```
 
-# Deploy Marimo
-helm upgrade --install marimo k8s/apps/marimo \
-  -n marimo \
-  -f k8s/apps/marimo/values.yaml
+Or deploy manually:
+
+```bash
+# Deploy MinIO
+helm upgrade --install minio k8s/apps/minio \
+  -n minio \
+  -f k8s/apps/minio/values.yaml \
+  -f k8s/apps/minio/values-dev.yaml
+
+# Wait for MinIO
+kubectl wait --for=condition=ready pod -l app=minio -n minio --timeout=300s
+
+# Deploy LakeFS
+helm upgrade --install lakefs k8s/apps/lakefs \
+  -n lakefs \
+  -f k8s/apps/lakefs/values.yaml \
+  -f k8s/apps/lakefs/values-dev.yaml
 ```
 
 ---
 
-## Step 6.4: Verify Dagster
+## Step 5.4: Verify MinIO
 
 ```bash
 # Check pods
-kubectl get pods -n dagster
+kubectl get pods -n minio
 
-# Port forward
-make port-forward-dagster
+# Port forward console
+make port-forward-minio
+# Or: kubectl port-forward svc/minio-console -n minio 9001:9001
 
-# Access http://localhost:3000
+# Access http://localhost:9001
+# Login with credentials from secrets
 ```
 
-In Dagster UI:
-1. Navigate to Assets
-2. Verify `sample_raw_data` and `transformed_data` assets are visible
-3. Try materializing an asset
+In MinIO Console:
+1. Verify you can log in
+2. Check buckets exist: `raw-data`, `data-products`, `lakefs`
+3. Try uploading a test file
 
 ---
 
-## Step 6.5: Verify Marimo
+## Step 5.5: Verify LakeFS
 
 ```bash
 # Check pods
-kubectl get pods -n marimo
+kubectl get pods -n lakefs
 
 # Port forward
-make port-forward-marimo
+make port-forward-lakefs
+# Or: kubectl port-forward svc/lakefs -n lakefs 8000:8000
 
-# Access http://localhost:2718
+# Access http://localhost:8000
+# Login with LakeFS credentials from secrets
+```
+
+In LakeFS UI:
+1. Verify you can log in
+2. Check `main-repo` repository exists
+3. Verify `main` branch exists
+
+---
+
+## Step 5.6: Test Data Flow
+
+```bash
+# Test MinIO CLI access (install mc if needed: brew install minio/stable/mc)
+mc alias set brev-minio http://localhost:9000 admin YOUR_PASSWORD
+
+# Upload test file
+echo "test data" > /tmp/test.txt
+mc cp /tmp/test.txt brev-minio/raw-data/
+
+# List files
+mc ls brev-minio/raw-data/
+
+# Test LakeFS CLI (install lakectl if needed)
+# Or use curl:
+curl -u "ACCESS_KEY:SECRET_KEY" http://localhost:8000/api/v1/repositories
+```
+
+---
+
+## Validation Approach
+
+```bash
+# MinIO running
+kubectl get pods -n minio | grep -E "Running|1/1"
+
+# LakeFS running
+kubectl get pods -n lakefs | grep -E "Running|1/1"
+
+# Buckets exist (via MinIO CLI or API)
+mc ls brev-minio/ | grep -E "raw-data|data-products|lakefs"
+
+# LakeFS repository exists
+curl -sf -u "$LAKEFS_KEY:$LAKEFS_SECRET" http://localhost:8000/api/v1/repositories/main-repo
 ```
 
 ---
 
 ## Completion Criteria
 
-- [ ] Dagster image built and pushed
-- [ ] Dagster webserver pod running
-- [ ] Dagster daemon pod running
-- [ ] Dagster user code deployment running
-- [ ] Dagster UI accessible at http://localhost:3000
-- [ ] Assets visible in Dagster UI
-- [ ] Can materialize sample assets
-- [ ] Marimo pod running
-- [ ] Marimo UI accessible at http://localhost:2718
-- [ ] Both applications show Synced in ArgoCD
+- [ ] MinIO pods running in `minio` namespace
+- [ ] MinIO console accessible at http://localhost:9001
+- [ ] Buckets created: `raw-data`, `data-products`, `lakefs`
+- [ ] LakeFS pods running in `lakefs` namespace
+- [ ] LakeFS UI accessible at http://localhost:8000
+- [ ] LakeFS connected to MinIO backend
+- [ ] Repository `main-repo` created
+- [ ] Can upload/download files via MinIO
+- [ ] Can list repositories via LakeFS API
+- [ ] ArgoCD shows both applications as Synced/Healthy
 
 ---
 
 ## Next Phase
 
-Once Dagster and Marimo are running, proceed to [Phase 7: NVIDIA AI Enterprise](phase-7.md).
+Once storage layer is running, proceed to [Phase 6: Data Platform](phase-6.md) to deploy Dagster and Marimo.

@@ -1,0 +1,31 @@
+# KAI Scheduler Application - GPU Workload Scheduling
+# Sync Wave 0: Deploy early, before any GPU workloads
+# This enables fractional GPU, gang scheduling, and topology-aware placement
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kai-scheduler
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/aerugo/brev-data-platform.git
+    targetRevision: main
+    path: k8s/apps/kai-scheduler
+    helm:
+      valueFiles:
+        - values.yaml
+        - values-dev.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

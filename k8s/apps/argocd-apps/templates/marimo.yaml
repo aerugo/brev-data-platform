@@ -1,0 +1,26 @@
+# Marimo Application - Interactive Notebooks
+# Sync Wave 2: Platform Layer
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: marimo
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/aerugo/brev-data-platform.git
+    targetRevision: main
+    path: k8s/apps/marimo
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: marimo
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

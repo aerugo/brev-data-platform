@@ -1,0 +1,3 @@
+# Exclude SOPS encrypted files - these need to be decrypted and applied separately
+*.enc.yaml
+*.enc.json

@@ -48,35 +48,72 @@ terraform/
 
 **Rationale**: Environment isolation prevents accidental cross-environment changes.
 
-### INV-I003: GPU Instance Type Validation
+### INV-I003: Minimum A100 GPU Required
 
-Brev instances for this platform must have NVIDIA GPU support. Validate GPU availability before deploying GPU workloads.
+Brev instances for this platform MUST have at least an NVIDIA A100 GPU (40GB or 80GB). T4 and smaller GPUs are NOT supported due to:
+- NIM LLM memory requirements (Llama 3 8B needs ~16GB+ for inference)
+- Safe Synthesizer memory requirements
+- KAI Scheduler fractional GPU features
 
-```hcl
-# Ensure instance type includes GPU
-variable "instance_type" {
-  type = string
-  validation {
-    condition     = can(regex("gpu|nvidia", lower(var.instance_type)))
-    error_message = "Instance type must include GPU support."
-  }
-}
+```bash
+# Correct - A100 or better (Brev instance types from web console)
+# CRUSOE provider (recommended - flexible storage/ports, stop/start without data loss):
+INSTANCE_TYPE="a100-80gb.1x"    # A100 80GB - $1.98/hr
+
+# Other providers (check availability):
+# DENVR: 40 GiB or 80 GiB VRAM options
+# LAMBDA: 40 GiB VRAM
+# MASSEDCOMPUTE: 80 GiB VRAM
+
+# Incorrect - insufficient VRAM
+GPU_TYPE="n1-highmem-4:nvidia-tesla-t4:1"       # NEVER - only 16GB
 ```
 
-**Rationale**: NIM and Safe Synthesizer require GPU. CPU-only instances will fail.
+**Note**: As of January 2026, A100 instances are only available through non-GCP providers (CRUSOE, DENVR, LAMBDA, etc.) which require creation via Brev web console. The Brev CLI only supports GCP which does not have A100 availability. See INV-I005 for documented exception.
 
-### INV-I004: Cloud-Init for K3S Bootstrap
+**Rationale**: T4/V100 have only 16GB VRAM which is insufficient for NIM LLM + Safe Synthesizer workloads. A100 40GB is the minimum for running the full stack.
 
-K3S installation must be automated via cloud-init user data, not manual SSH. This ensures reproducibility.
+### INV-I004: Cloud-Init/Script for RKE2 Bootstrap
 
-```hcl
-resource "brev_instance" "main" {
-  user_data = file("${path.module}/cloud-init.yaml")
-  # K3S installation happens automatically on boot
-}
+RKE2 installation must be automated via cloud-init user data or bootstrap scripts, not manual SSH commands. This ensures reproducibility.
+
+```bash
+# Correct - automated bootstrap script
+make bootstrap-rke2  # Runs scripts/bootstrap-rke2.sh
+
+# Correct - cloud-init (if supported by Brev)
+# Instance user_data points to scripts/cloud-init/rke2-gpu.yaml
+
+# Incorrect - manual SSH and typing commands
+brev shell instance
+curl -sfL https://get.rke2.io | sh -  # NEVER manually
 ```
 
 **Rationale**: Manual installation is not reproducible and creates configuration drift.
+
+### INV-I005: Configuration as Code (No Manual Steps)
+
+ALL infrastructure and application configuration MUST be defined in code and applied via automated tooling. No manual kubectl commands, no manual cloud console changes, no undocumented configuration.
+
+```bash
+# Correct - all configuration via Makefile/scripts
+make full-setup          # Creates instance, bootstraps RKE2, deploys KAI
+make bootstrap-argocd    # ArgoCD then manages everything via GitOps
+make apply-secrets       # Secrets applied from SOPS-encrypted files
+
+# Incorrect - manual commands
+kubectl create secret generic my-secret --from-literal=key=value  # NEVER
+kubectl edit deployment dagster  # NEVER
+brev shell instance && apt install something  # NEVER
+```
+
+**Exceptions that require documentation:**
+- Phase 0 prerequisites (account creation, API key generation) - documented in phase-0.md
+- Initial Age key generation - documented in phase-2.md
+- Brev instance creation via web console (when A100+ GPUs not available via CLI) - documented in phase-3.md
+- GitHub repository secrets - documented in phase-10.md
+
+**Rationale**: Manual configuration creates drift, is not reproducible, cannot be audited, and will be lost on rebuild.
 
 ---
 

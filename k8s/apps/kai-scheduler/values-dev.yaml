@@ -1,0 +1,33 @@
+# KAI Scheduler - Development Environment Overrides
+# Reduced resources and relaxed settings for dev
+
+kai-scheduler:
+  # Reduced resources for dev
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+  # Development configuration
+  config:
+    # Keep all GPU features enabled for testing
+    gpuScheduling:
+      enabled: true
+
+    fractionalGpu:
+      enabled: true
+      minFraction: 0.1
+
+    # Shorter timeout for gang scheduling in dev
+    gangScheduling:
+      enabled: true
+      timeoutSeconds: 60
+
+  # Metrics - keep enabled for observability testing
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true

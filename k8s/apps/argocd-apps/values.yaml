@@ -1,0 +1,9 @@
+# ArgoCD Applications Values
+# These values can be used to customize the applications if needed
+
+# Repository configuration
+repository:
+  url: https://github.com/aerugo/brev-data-platform.git
+  targetRevision: main
+
+# Sync policy defaults are in individual Application templates

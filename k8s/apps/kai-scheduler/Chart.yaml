@@ -1,0 +1,19 @@
+apiVersion: v2
+name: kai-scheduler
+description: KAI Scheduler for advanced GPU workload scheduling
+type: application
+version: 0.1.0
+appVersion: "0.12.9"
+
+# KAI Scheduler is the open-source GPU scheduler from Run:AI
+# Provides:
+# - Fractional GPU allocation
+# - Gang scheduling for multi-GPU jobs
+# - GPU memory enforcement
+# - Topology-aware scheduling (NVLink)
+# - Fair sharing and bin packing policies
+#
+# GitHub: https://github.com/NVIDIA/KAI-Scheduler
+# Docs: https://github.com/NVIDIA/KAI-Scheduler/blob/main/docs/README.md
+#
+# Installing directly from OCI registry (no helm dependency needed)

@@ -1,0 +1,71 @@
+# ArgoCD Helm Chart Values
+# https://github.com/argoproj/argo-helm/tree/main/charts/argo-cd
+
+# Server configuration
+server:
+  # Run in insecure mode (we access via port-forward, no TLS needed)
+  extraArgs:
+    - --insecure
+
+  # Resource limits
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+# Controller configuration
+controller:
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 250m
+      memory: 512Mi
+
+# Repo server configuration
+repoServer:
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+# Application set controller
+applicationSet:
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 50m
+      memory: 128Mi
+
+# Redis configuration
+redis:
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 50m
+      memory: 128Mi
+
+# Dex (SSO) - disabled for simplicity
+dex:
+  enabled: false
+
+# Notifications - disabled for now
+notifications:
+  enabled: false
+
+# Global settings
+global:
+  # Log level
+  logging:
+    level: info

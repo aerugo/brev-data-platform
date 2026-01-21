@@ -1,0 +1,130 @@
+# KAI Scheduler Configuration
+# Advanced GPU scheduling for brev-data-platform
+#
+# KAI Scheduler provides:
+# - Fractional GPU sharing (split H200 between workloads)
+# - Gang scheduling (multi-GPU jobs start together)
+# - GPU memory limits enforcement
+# - Topology-aware placement (NVLink optimization)
+# - Fair sharing policies
+#
+# All GPU workloads (NIM, Safe Synthesizer) should use:
+#   spec.schedulerName: kai-scheduler
+
+kai-scheduler:
+  # Scheduler deployment
+  replicaCount: 1
+
+  image:
+    repository: nvcr.io/nvidia/kai-scheduler
+    tag: "0.4.1"
+    pullPolicy: IfNotPresent
+
+  # Resource allocation for scheduler itself
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  # Scheduler configuration
+  config:
+    # Enable GPU scheduling features
+    gpuScheduling:
+      enabled: true
+
+    # Fractional GPU support
+    # Allows pods to request partial GPUs (e.g., 0.5 GPU)
+    fractionalGpu:
+      enabled: true
+      # Minimum fraction allocatable
+      minFraction: 0.1
+
+    # GPU memory enforcement
+    # Enforces memory limits on GPU workloads
+    memoryEnforcement:
+      enabled: true
+
+    # Topology awareness
+    # Optimizes placement for multi-GPU with NVLink
+    topology:
+      enabled: true
+      # Prefer NVLink-connected GPUs for multi-GPU jobs
+      nvlinkAware: true
+
+    # Scheduling policies
+    policies:
+      # Default scheduling strategy
+      # Options: binpack, spread, random
+      defaultStrategy: binpack
+
+      # Priority classes for GPU workloads
+      priorityClasses:
+        - name: high-priority
+          value: 1000
+        - name: medium-priority
+          value: 500
+        - name: low-priority
+          value: 100
+
+    # Gang scheduling
+    # Ensures all pods in a job start together
+    gangScheduling:
+      enabled: true
+      # Timeout for gang to be scheduled
+      timeoutSeconds: 300
+
+  # Metrics for Prometheus
+  metrics:
+    enabled: true
+    port: 9090
+
+    # ServiceMonitor for Prometheus Operator
+    serviceMonitor:
+      enabled: true
+      namespace: monitoring
+      interval: 30s
+      labels:
+        release: monitoring
+
+  # RBAC
+  rbac:
+    create: true
+
+  # Service account
+  serviceAccount:
+    create: true
+    name: kai-scheduler
+
+  # Pod security
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    fsGroup: 1000
+
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+
+  # Node selector - scheduler runs on control plane
+  nodeSelector: {}
+
+  # Tolerations - allow scheduling on control plane if needed
+  tolerations:
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule
+    - key: node-role.kubernetes.io/master
+      operator: Exists
+      effect: NoSchedule
+
+# Custom scheduler class for GPU workloads
+# Pods using this class will be scheduled by KAI
+schedulerClass:
+  enabled: true
+  name: kai-scheduler
