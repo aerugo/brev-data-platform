@@ -1,0 +1,4 @@
+.env
+.env.local
+*.enc.yaml
+!k8s/**/*.enc.yaml

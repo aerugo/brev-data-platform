@@ -1,0 +1,14 @@
+# SOPS Configuration for brev-data-platform
+# All files matching these patterns will be encrypted with Age
+
+creation_rules:
+  # Kubernetes secret files
+  - path_regex: .*\.enc\.yaml$
+    age: age18vt4yspgr9qtq30n6ty20l8jpxeu5drd38sl9kdlxqvggswtsdmsyeydck
+
+  - path_regex: .*\.enc\.json$
+    age: age18vt4yspgr9qtq30n6ty20l8jpxeu5drd38sl9kdlxqvggswtsdmsyeydck
+
+  # Environment files
+  - path_regex: .*\.env\.enc$
+    age: age18vt4yspgr9qtq30n6ty20l8jpxeu5drd38sl9kdlxqvggswtsdmsyeydck

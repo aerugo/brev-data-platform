@@ -1,0 +1,488 @@
+# Brev Data Platform - Architectural Invariants
+
+> **Purpose**: This document captures architectural constraints and rules that must be maintained across the codebase. Violating these invariants will break the deployment or compromise security.
+
+---
+
+## Infrastructure Invariants (INV-I)
+
+### INV-I001: Terraform State Must Be Remote
+
+Terraform state must never be stored locally or committed to Git. Use remote backend (S3, GCS, or Terraform Cloud).
+
+```hcl
+# Correct
+terraform {
+  backend "s3" {
+    bucket = "terraform-state-bucket"
+    key    = "brev-data-platform/dev/terraform.tfstate"
+    region = "us-east-1"
+  }
+}
+
+# Incorrect - local state
+terraform {
+  backend "local" {
+    path = "terraform.tfstate"  # NEVER
+  }
+}
+```
+
+**Rationale**: Local state causes conflicts, loses state on machine failure, and may expose sensitive outputs.
+
+### INV-I002: Environment Isolation via Directories
+
+Each environment (dev, staging, prod) has its own directory under `terraform/environments/`. Environments must not share state.
+
+```
+terraform/
+├── environments/
+│   ├── dev/          # Development environment
+│   │   ├── main.tf
+│   │   ├── variables.tf
+│   │   └── terraform.tfvars
+│   └── prod/         # Production environment (if created)
+│       └── ...
+└── modules/          # Shared modules
+```
+
+**Rationale**: Environment isolation prevents accidental cross-environment changes.
+
+### INV-I003: GPU Instance Type Validation
+
+Brev instances for this platform must have NVIDIA GPU support. Validate GPU availability before deploying GPU workloads.
+
+```hcl
+# Ensure instance type includes GPU
+variable "instance_type" {
+  type = string
+  validation {
+    condition     = can(regex("gpu|nvidia", lower(var.instance_type)))
+    error_message = "Instance type must include GPU support."
+  }
+}
+```
+
+**Rationale**: NIM and Safe Synthesizer require GPU. CPU-only instances will fail.
+
+### INV-I004: Cloud-Init for K3S Bootstrap
+
+K3S installation must be automated via cloud-init user data, not manual SSH. This ensures reproducibility.
+
+```hcl
+resource "brev_instance" "main" {
+  user_data = file("${path.module}/cloud-init.yaml")
+  # K3S installation happens automatically on boot
+}
+```
+
+**Rationale**: Manual installation is not reproducible and creates configuration drift.
+
+---
+
+## Kubernetes Invariants (INV-K)
+
+### INV-K001: Namespace Per Application
+
+Each application deploys to its own namespace. Never deploy multiple unrelated applications to the same namespace.
+
+```yaml
+# Correct - dedicated namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dagster
+---
+# Dagster resources in dagster namespace
+
+# Incorrect - mixing apps in default namespace
+# All apps in namespace: default  # NEVER
+```
+
+**Rationale**: Namespace isolation enables RBAC, resource quotas, and clean teardown.
+
+### INV-K002: Resource Limits on All Pods
+
+All pods must have resource requests and limits defined. No unbounded resource consumption.
+
+```yaml
+# Correct
+resources:
+  requests:
+    memory: "256Mi"
+    cpu: "100m"
+  limits:
+    memory: "512Mi"
+    cpu: "500m"
+
+# Incorrect - no limits
+resources: {}  # NEVER
+```
+
+**Rationale**: Unbounded pods can starve other workloads and crash nodes.
+
+### INV-K003: GPU Resources Explicitly Requested
+
+Workloads requiring GPU must explicitly request `nvidia.com/gpu` resources. Never assume GPU availability.
+
+```yaml
+# Correct
+resources:
+  limits:
+    nvidia.com/gpu: 1
+
+# Incorrect - hoping GPU is available
+# No GPU resource specified but expecting GPU access  # NEVER
+```
+
+**Rationale**: Without explicit GPU request, pods may schedule on non-GPU nodes or share GPUs unexpectedly.
+
+### INV-K004: Helm Values Override Pattern
+
+Base values in `values.yaml`, environment overrides in `values-<env>.yaml`. Never modify `values.yaml` for environment-specific settings.
+
+```
+k8s/apps/dagster/
+├── Chart.yaml
+├── values.yaml           # Defaults (environment-agnostic)
+├── values-dev.yaml       # Dev overrides
+└── values-prod.yaml      # Prod overrides (if needed)
+```
+
+**Rationale**: Keeps defaults clean and makes environment differences explicit.
+
+### INV-K005: No Hardcoded Images Tags as `latest`
+
+All container images must use specific version tags, never `latest`.
+
+```yaml
+# Correct
+image: dagster/dagster:1.6.0
+
+# Incorrect
+image: dagster/dagster:latest  # NEVER
+image: dagster/dagster         # NEVER (implies latest)
+```
+
+**Rationale**: `latest` is mutable and causes unpredictable deployments.
+
+---
+
+## Security Invariants (INV-S)
+
+### INV-S001: No Plaintext Secrets in Git
+
+All secrets must be encrypted with SOPS before committing. Plaintext secrets in Git is a critical security violation.
+
+```yaml
+# Correct - SOPS encrypted file
+# secrets.enc.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: minio-credentials
+data:
+  access-key: ENC[AES256_GCM,data:...,type:str]
+  secret-key: ENC[AES256_GCM,data:...,type:str]
+sops:
+  kms: []
+  age:
+    - recipient: age1...
+      enc: |
+        -----BEGIN AGE ENCRYPTED FILE-----
+        ...
+
+# Incorrect - plaintext
+# secrets.yaml
+data:
+  access-key: bXlhY2Nlc3NrZXk=  # NEVER commit this
+```
+
+**Rationale**: Plaintext secrets in Git are permanently exposed, even after deletion.
+
+### INV-S002: SOPS Configuration in Repository Root
+
+`.sops.yaml` must exist in repository root and define encryption rules for all secret files.
+
+```yaml
+# .sops.yaml
+creation_rules:
+  - path_regex: .*\.enc\.yaml$
+    age: age1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+  - path_regex: .*\.enc\.json$
+    age: age1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+**Rationale**: Ensures consistent encryption across the team and prevents accidental plaintext commits.
+
+### INV-S003: NGC API Key as Kubernetes Secret
+
+NVIDIA NGC API key must be stored as a Kubernetes secret (SOPS encrypted), never in ConfigMaps or environment variables in plain Helm values.
+
+```yaml
+# Correct - reference secret
+env:
+  - name: NGC_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: ngc-credentials
+        key: api-key
+
+# Incorrect - plain value
+env:
+  - name: NGC_API_KEY
+    value: "nvapi-xxxx"  # NEVER
+```
+
+**Rationale**: NGC API keys provide access to NVIDIA AI Enterprise resources and must be protected.
+
+### INV-S004: MinIO Credentials Encrypted
+
+MinIO root user and password must be SOPS encrypted secrets, never plaintext in values files.
+
+**Rationale**: MinIO stores all data lake content. Credential exposure compromises all data.
+
+---
+
+## GitOps Invariants (INV-G)
+
+### INV-G001: App-of-Apps Pattern for ArgoCD
+
+All applications are managed through the app-of-apps pattern. The root Application points to `k8s/apps/` which contains individual Application manifests.
+
+```
+k8s/
+├── bootstrap/
+│   └── argocd-apps.yaml    # Root Application (app-of-apps)
+└── apps/
+    ├── minio/
+    │   └── application.yaml  # ArgoCD Application for MinIO
+    ├── dagster/
+    │   └── application.yaml  # ArgoCD Application for Dagster
+    └── ...
+```
+
+**Rationale**: Single entry point for all applications, enables bulk operations and consistent management.
+
+### INV-G002: Automated Sync for Dev Environment
+
+Development environment applications use automated sync with self-heal enabled.
+
+```yaml
+# Dev application
+spec:
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+```
+
+**Rationale**: Dev environment should auto-update on Git push for rapid iteration.
+
+### INV-G003: Source of Truth is Git
+
+The Git repository is the single source of truth. Never make manual `kubectl` changes that bypass ArgoCD.
+
+```bash
+# Correct - change in Git, ArgoCD syncs
+git commit -m "Update replica count"
+git push
+# ArgoCD detects and applies
+
+# Incorrect - direct kubectl
+kubectl scale deployment dagster --replicas=3  # NEVER
+```
+
+**Rationale**: Manual changes cause drift and will be reverted by ArgoCD sync.
+
+### INV-G004: Sync Waves for Dependencies
+
+Applications with dependencies must use sync waves to ensure correct ordering.
+
+```yaml
+# Database deploys first (wave 0)
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+
+# App deploys after database (wave 1)
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+```
+
+**Rationale**: Prevents race conditions where apps start before their dependencies.
+
+---
+
+## Data Invariants (INV-D)
+
+### INV-D001: Standard Bucket Structure
+
+MinIO must have these standard buckets:
+- `raw-data` - Ingested raw data
+- `data-products` - Transformed/processed data
+- `lakefs` - LakeFS metadata (managed by LakeFS)
+
+**Rationale**: Consistent bucket structure enables reusable pipeline patterns.
+
+### INV-D002: LakeFS for Data Versioning
+
+All data transformations must go through LakeFS branches. Never write directly to MinIO buckets that LakeFS manages.
+
+```python
+# Correct - write via LakeFS
+lakefs_client.objects.upload_object(
+    repository="main-repo",
+    branch="feature-branch",
+    path="data/output.parquet",
+    content=data
+)
+
+# Incorrect - direct MinIO write
+minio_client.put_object("data-products", "output.parquet", data)  # NEVER
+```
+
+**Rationale**: Direct writes bypass versioning and break data lineage.
+
+### INV-D003: Parquet for Structured Data
+
+Structured data must be stored as Parquet format, not CSV or JSON.
+
+**Rationale**: Parquet provides schema, compression, and columnar access for analytics.
+
+---
+
+## Pipeline Invariants (INV-P)
+
+### INV-P001: Assets Over Ops
+
+Dagster pipelines must use the asset-based paradigm (`@asset`) over the legacy ops paradigm (`@op`) for data transformations.
+
+```python
+# Correct
+@asset
+def processed_data(raw_data: pd.DataFrame) -> pd.DataFrame:
+    return raw_data.transform(...)
+
+# Discouraged - use only when assets don't fit
+@op
+def process_data(context, data):
+    ...
+```
+
+**Rationale**: Assets provide better lineage, observability, and incremental computation.
+
+### INV-P002: I/O Managers for Storage
+
+All asset persistence must use I/O managers, not direct storage calls within asset code.
+
+```python
+# Correct - I/O manager handles storage
+@asset(io_manager_key="lakefs_io_manager")
+def my_asset() -> pd.DataFrame:
+    return pd.DataFrame(...)  # I/O manager writes to LakeFS
+
+# Incorrect - direct storage in asset
+@asset
+def my_asset() -> None:
+    df = pd.DataFrame(...)
+    minio_client.put_object(...)  # NEVER
+```
+
+**Rationale**: I/O managers centralize storage logic and enable environment-specific configuration.
+
+### INV-P003: Type Annotations on Assets
+
+All Dagster assets must have type annotations for inputs and outputs.
+
+```python
+# Correct
+@asset
+def clean_data(raw_data: pd.DataFrame) -> pd.DataFrame:
+    ...
+
+# Incorrect - no types
+@asset
+def clean_data(raw_data):  # Missing types
+    ...
+```
+
+**Rationale**: Type annotations enable Dagster's type checking and documentation.
+
+---
+
+## NVIDIA Invariants (INV-N)
+
+### INV-N001: NIM Requires GPU Node
+
+NIM deployments must be scheduled on nodes with GPU. Use node selectors or taints/tolerations.
+
+```yaml
+spec:
+  nodeSelector:
+    nvidia.com/gpu.present: "true"
+  tolerations:
+    - key: "nvidia.com/gpu"
+      operator: "Exists"
+      effect: "NoSchedule"
+```
+
+**Rationale**: NIM without GPU will fail or fall back to unusable CPU performance.
+
+### INV-N002: Model Configuration in ConfigMap
+
+NIM model selection and parameters must be in ConfigMaps, not hardcoded in deployments.
+
+```yaml
+# Correct
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nim-config
+data:
+  model_name: "meta/llama3-8b-instruct"
+  max_tokens: "4096"
+
+# Incorrect - hardcoded in deployment
+env:
+  - name: MODEL
+    value: "meta/llama3-8b-instruct"  # Move to ConfigMap
+```
+
+**Rationale**: Enables model swapping without deployment changes.
+
+### INV-N003: Safe Synthesizer Output to LakeFS
+
+Synthetic data generated by Safe Synthesizer must be written to LakeFS branches, not directly to MinIO.
+
+**Rationale**: Synthetic data needs versioning and lineage tracking like any other data product.
+
+---
+
+## Adding New Invariants
+
+When discovering new architectural constraints:
+
+1. Add to this document with next available number in the appropriate category
+2. Include code examples of correct and incorrect usage
+3. Explain the rationale
+4. Consider adding validation (CI check, lint rule, etc.)
+5. Update related documentation
+
+### Category Prefixes
+
+| Prefix | Category |
+|--------|----------|
+| INV-I | Infrastructure (Terraform, Brev) |
+| INV-K | Kubernetes (K3S, Helm, resources) |
+| INV-S | Security (secrets, credentials) |
+| INV-G | GitOps (ArgoCD, sync) |
+| INV-D | Data (MinIO, LakeFS, formats) |
+| INV-P | Pipeline (Dagster) |
+| INV-N | NVIDIA (NIM, Safe Synthesizer, GPU) |
+
+---
+
+*Created: 2026-01-21*
+*Last Updated: 2026-01-21*
