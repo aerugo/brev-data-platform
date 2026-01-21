@@ -1,0 +1,42 @@
+# MinIO Helm Chart Values
+# Uses the official MinIO Helm chart as a dependency
+
+minio:
+  # Mode: standalone for single-node development
+  mode: standalone
+
+  # Persistence
+  persistence:
+    enabled: true
+    size: 50Gi
+
+  # Resource limits (INV-K002)
+  resources:
+    requests:
+      memory: 512Mi
+      cpu: 250m
+    limits:
+      memory: 2Gi
+      cpu: 1000m
+
+  # Root credentials - loaded from secret
+  existingSecret: minio-credentials
+
+  # Console service
+  consoleService:
+    type: ClusterIP
+    port: 9001
+
+  # API service
+  service:
+    type: ClusterIP
+    port: 9000
+
+  # Create default buckets
+  buckets:
+    - name: raw-data
+      policy: none
+    - name: data-products
+      policy: none
+    - name: lakefs
+      policy: none
