@@ -6,6 +6,8 @@ lakefs:
   lakefsConfig: |
     database:
       type: local
+      local:
+        path: /lakefs/data/lakefs.db
     blockstore:
       type: s3
       s3:
@@ -32,6 +34,16 @@ lakefs:
           name: minio-credentials
           key: rootPassword
 
+  # Persistent volume for local database
+  extraVolumes:
+    - name: lakefs-data
+      persistentVolumeClaim:
+        claimName: lakefs-data
+
+  extraVolumeMounts:
+    - name: lakefs-data
+      mountPath: /lakefs/data
+
   # Resource limits (INV-K002)
   resources:
     requests:
@@ -48,8 +60,3 @@ lakefs:
 
   # Use existing secret for credentials
   existingSecret: lakefs-credentials
-
-  # Persistence for local database
-  persistence:
-    enabled: true
-    size: 10Gi

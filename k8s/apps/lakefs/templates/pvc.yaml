@@ -1,0 +1,15 @@
+# PersistentVolumeClaim for LakeFS local database
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: lakefs-data
+  labels:
+    app.kubernetes.io/name: lakefs
+    app.kubernetes.io/component: database
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 10Gi
