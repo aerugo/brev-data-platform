@@ -24,7 +24,15 @@ fi
 # Source environment variables
 source .env.local
 
+# Get Age public key from .sops.yaml
+AGE_PUBLIC_KEY=$(grep 'age:' .sops.yaml | head -1 | awk '{print $2}')
+if [ -z "$AGE_PUBLIC_KEY" ]; then
+    echo "Error: Could not find Age public key in .sops.yaml"
+    exit 1
+fi
+
 echo "=== Creating encrypted secrets ==="
+echo "Using Age key: ${AGE_PUBLIC_KEY:0:20}..."
 
 # Create temp directory
 TEMP_DIR=$(mktemp -d)
@@ -47,7 +55,7 @@ stringData:
 EOF
 
 mkdir -p k8s/apps/minio
-sops -e "$TEMP_DIR/minio-secrets.yaml" > k8s/apps/minio/secrets.enc.yaml
+sops --config /dev/null --age "$AGE_PUBLIC_KEY" -e "$TEMP_DIR/minio-secrets.yaml" > k8s/apps/minio/secrets.enc.yaml
 echo "  ✓ k8s/apps/minio/secrets.enc.yaml"
 
 # -----------------------------------------------------------------------------
@@ -71,7 +79,7 @@ stringData:
 EOF
 
 mkdir -p k8s/apps/lakefs
-sops -e "$TEMP_DIR/lakefs-secrets.yaml" > k8s/apps/lakefs/secrets.enc.yaml
+sops --config /dev/null --age "$AGE_PUBLIC_KEY" -e "$TEMP_DIR/lakefs-secrets.yaml" > k8s/apps/lakefs/secrets.enc.yaml
 echo "  ✓ k8s/apps/lakefs/secrets.enc.yaml"
 
 # -----------------------------------------------------------------------------
@@ -107,7 +115,7 @@ stringData:
 EOF
 
 mkdir -p k8s/apps/nvidia-ai
-sops -e "$TEMP_DIR/nvidia-secrets.yaml" > k8s/apps/nvidia-ai/secrets.enc.yaml
+sops --config /dev/null --age "$AGE_PUBLIC_KEY" -e "$TEMP_DIR/nvidia-secrets.yaml" > k8s/apps/nvidia-ai/secrets.enc.yaml
 echo "  ✓ k8s/apps/nvidia-ai/secrets.enc.yaml"
 
 # -----------------------------------------------------------------------------
@@ -131,7 +139,7 @@ stringData:
 EOF
 
 mkdir -p k8s/apps/argocd-apps
-sops -e "$TEMP_DIR/argocd-secrets.yaml" > k8s/apps/argocd-apps/secrets.enc.yaml
+sops --config /dev/null --age "$AGE_PUBLIC_KEY" -e "$TEMP_DIR/argocd-secrets.yaml" > k8s/apps/argocd-apps/secrets.enc.yaml
 echo "  ✓ k8s/apps/argocd-apps/secrets.enc.yaml"
 
 # -----------------------------------------------------------------------------
@@ -157,7 +165,7 @@ stringData:
 EOF
 
 mkdir -p k8s/apps/dagster
-sops -e "$TEMP_DIR/dagster-secrets.yaml" > k8s/apps/dagster/secrets.enc.yaml
+sops --config /dev/null --age "$AGE_PUBLIC_KEY" -e "$TEMP_DIR/dagster-secrets.yaml" > k8s/apps/dagster/secrets.enc.yaml
 echo "  ✓ k8s/apps/dagster/secrets.enc.yaml"
 
 # -----------------------------------------------------------------------------
@@ -181,7 +189,7 @@ stringData:
 EOF
 
 mkdir -p k8s/apps/marimo
-sops -e "$TEMP_DIR/marimo-secrets.yaml" > k8s/apps/marimo/secrets.enc.yaml
+sops --config /dev/null --age "$AGE_PUBLIC_KEY" -e "$TEMP_DIR/marimo-secrets.yaml" > k8s/apps/marimo/secrets.enc.yaml
 echo "  ✓ k8s/apps/marimo/secrets.enc.yaml"
 
 echo ""

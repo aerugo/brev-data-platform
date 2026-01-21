@@ -61,65 +61,77 @@ No instances in org Riksbank-Org
 
 ### Phase 0: Prerequisites & Manual Setup
 
-**Status**: Pending
-**Started**:
-**Completed**:
+**Status**: Complete ✓
+**Started**: 2026-01-21
+**Completed**: 2026-01-21
 
 #### Checklist
 
-- [ ] Brev CLI logged in
-- [ ] NGC account created
-- [ ] NGC API Key generated
-- [ ] NGC has NIM model access
-- [ ] GitHub repository created (or using existing)
-- [ ] GitHub PAT generated
-- [ ] kubectl installed (1.28+)
-- [ ] helm installed (3.13+)
-- [ ] sops installed (3.8+)
-- [ ] age installed (1.1+)
+- [x] Brev CLI logged in (Riksbank-Org)
+- [x] NGC account created
+- [x] NGC API Key generated (stored in .env.local)
+- [x] NGC has NIM model access
+- [x] GitHub repository created: https://github.com/aerugo/brev-data-platform
+- [x] GitHub PAT generated (from gh auth token)
+- [x] kubectl installed (v1.33.1)
+- [x] helm installed (v3.17.3)
+- [x] sops installed (3.11.0) via homebrew
+- [x] age installed (v1.2.1) via homebrew
+- [x] Age key generated at ~/.config/sops/age/keys.txt
 
 #### Notes
 
-User is already logged into Brev. Need to verify other prerequisites.
+All prerequisites verified and installed. Age public key: `age18vt4yspgr9qtq30n6ty20l8jpxeu5drd38sl9kdlxqvggswtsdmsyeydck`
 
 ---
 
 ### Phase 1: Repository Structure
 
-**Status**: Pending
-**Started**:
-**Completed**:
+**Status**: Complete ✓
+**Started**: 2026-01-21
+**Completed**: 2026-01-21
 
 #### Notes
 
-Foundation structure already exists:
-- `.CLAUDE.md` ✓
-- `.claude/agents/` ✓
-- `.claude/skills/` ✓
-- `docs/plans/` ✓
-- `docs/invariants/` ✓
-
-Still need to create:
-- `scripts/`
-- `k8s/`
-- `dagster/`
-- `marimo/`
-- `config/`
-- `Makefile`
-- `.gitignore`
-- `.env.example`
+Created all repository structure:
+- `Makefile` - 25+ commands for instance management, port-forwarding, secrets, validation
+- `.gitignore` - Comprehensive exclusions
+- `.env.example` - Template for environment variables
+- `scripts/cloud-init/k3s-gpu.yaml` - K3S + NVIDIA GPU bootstrap
+- `scripts/setup-kubeconfig.sh` - Kubeconfig setup
+- `scripts/bootstrap-argocd.sh` - ArgoCD installation script
+- `scripts/create-secrets.sh` - SOPS-encrypted secrets generation
+- `README.md` - Project documentation
+- `dagster/` - Package placeholders (assets/, io_managers/, resources/, tests/)
+- `k8s/` - Kubernetes manifests directory structure
+- `marimo/notebooks/` - Notebook directory
+- `config/` - Configuration directories (nim/, safe-synthesizer/)
 
 ---
 
 ### Phase 2: Secrets & Encryption Setup
 
-**Status**: Pending
-**Started**:
-**Completed**:
+**Status**: Complete ✓
+**Started**: 2026-01-21
+**Completed**: 2026-01-21
 
 #### Notes
 
-Requires Age key generation (manual step).
+Generated all encrypted secrets with SOPS + Age:
+- `k8s/apps/minio/secrets.enc.yaml` - MinIO credentials
+- `k8s/apps/lakefs/secrets.enc.yaml` - LakeFS credentials + MinIO access
+- `k8s/apps/nvidia-ai/secrets.enc.yaml` - NGC API key + docker registry auth
+- `k8s/apps/argocd-apps/secrets.enc.yaml` - GitHub repo credentials
+- `k8s/apps/dagster/secrets.enc.yaml` - All service connections
+- `k8s/apps/marimo/secrets.enc.yaml` - MinIO + LakeFS access
+
+Generated credentials:
+- MINIO_ROOT_PASSWORD: Random 32-char base64
+- LAKEFS_ACCESS_KEY_ID: 20-char hex
+- LAKEFS_SECRET_ACCESS_KEY: 32-byte base64
+- GITHUB_PAT: From gh auth token
+
+Fixed SOPS 3.11 issue requiring `--config /dev/null` for explicit `--age` flag usage.
 
 ---
 
@@ -188,10 +200,28 @@ Will use `/brev create brev-data-platform-dev -g "..."` to create instance.
 - `docs/plans/active/grand_plan/spec.md` - Feature specification
 - `docs/plans/active/grand_plan/development-plan.md` - 10-phase plan
 - `docs/plans/active/grand_plan/work-notes.md` - This file
+- `Makefile` - Build and management commands
+- `.gitignore` - Git exclusions
+- `.env.example` - Environment template
+- `.sops.yaml` - SOPS encryption config
+- `README.md` - Project documentation
+- `scripts/cloud-init/k3s-gpu.yaml` - K3S bootstrap
+- `scripts/setup-kubeconfig.sh` - Kubeconfig setup
+- `scripts/bootstrap-argocd.sh` - ArgoCD installation
+- `scripts/create-secrets.sh` - Secrets generation
+- `k8s/apps/minio/secrets.enc.yaml` - Encrypted MinIO secrets
+- `k8s/apps/lakefs/secrets.enc.yaml` - Encrypted LakeFS secrets
+- `k8s/apps/nvidia-ai/secrets.enc.yaml` - Encrypted NVIDIA secrets
+- `k8s/apps/argocd-apps/secrets.enc.yaml` - Encrypted ArgoCD secrets
+- `k8s/apps/dagster/secrets.enc.yaml` - Encrypted Dagster secrets
+- `k8s/apps/marimo/secrets.enc.yaml` - Encrypted Marimo secrets
+- `dagster/` - Package structure (assets, io_managers, resources, tests)
+- `marimo/notebooks/.gitkeep` - Placeholder
+- `config/` - Configuration directories
 
 ### Modified
 
-(none yet)
+- `.env.local` - Added generated credentials (git-ignored)
 
 ---
 
