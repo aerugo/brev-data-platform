@@ -1,0 +1,194 @@
+#!/bin/bash
+# Create encrypted Kubernetes secrets from .env.local
+
+set -e
+
+# Check for .env.local
+if [ ! -f ".env.local" ]; then
+    echo "Error: .env.local not found"
+    echo "Copy .env.example to .env.local and fill in your values"
+    exit 1
+fi
+
+# Check for SOPS_AGE_KEY_FILE
+if [ -z "$SOPS_AGE_KEY_FILE" ]; then
+    export SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt
+fi
+
+if [ ! -f "$SOPS_AGE_KEY_FILE" ]; then
+    echo "Error: Age key not found at $SOPS_AGE_KEY_FILE"
+    echo "Generate one with: age-keygen -o ~/.config/sops/age/keys.txt"
+    exit 1
+fi
+
+# Source environment variables
+source .env.local
+
+echo "=== Creating encrypted secrets ==="
+
+# Create temp directory
+TEMP_DIR=$(mktemp -d)
+trap "rm -rf $TEMP_DIR" EXIT
+
+# -----------------------------------------------------------------------------
+# MinIO secrets
+# -----------------------------------------------------------------------------
+echo "Creating MinIO secrets..."
+cat > "$TEMP_DIR/minio-secrets.yaml" <<EOF
+apiVersion: v1
+kind: Secret
+metadata:
+  name: minio-credentials
+  namespace: minio
+type: Opaque
+stringData:
+  root-user: "${MINIO_ROOT_USER}"
+  root-password: "${MINIO_ROOT_PASSWORD}"
+EOF
+
+mkdir -p k8s/apps/minio
+sops -e "$TEMP_DIR/minio-secrets.yaml" > k8s/apps/minio/secrets.enc.yaml
+echo "  ✓ k8s/apps/minio/secrets.enc.yaml"
+
+# -----------------------------------------------------------------------------
+# LakeFS secrets
+# -----------------------------------------------------------------------------
+echo "Creating LakeFS secrets..."
+cat > "$TEMP_DIR/lakefs-secrets.yaml" <<EOF
+apiVersion: v1
+kind: Secret
+metadata:
+  name: lakefs-credentials
+  namespace: lakefs
+type: Opaque
+stringData:
+  access-key-id: "${LAKEFS_ACCESS_KEY_ID}"
+  secret-access-key: "${LAKEFS_SECRET_ACCESS_KEY}"
+  minio-access-key: "${MINIO_ROOT_USER}"
+  minio-secret-key: "${MINIO_ROOT_PASSWORD}"
+  # Encryption key for auth tokens (generate random)
+  auth-encrypt-secret-key: "$(openssl rand -hex 32)"
+EOF
+
+mkdir -p k8s/apps/lakefs
+sops -e "$TEMP_DIR/lakefs-secrets.yaml" > k8s/apps/lakefs/secrets.enc.yaml
+echo "  ✓ k8s/apps/lakefs/secrets.enc.yaml"
+
+# -----------------------------------------------------------------------------
+# NVIDIA AI secrets
+# -----------------------------------------------------------------------------
+echo "Creating NVIDIA AI secrets..."
+cat > "$TEMP_DIR/nvidia-secrets.yaml" <<EOF
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ngc-credentials
+  namespace: nvidia-ai
+type: Opaque
+stringData:
+  api-key: "${NGC_API_KEY}"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ngc-image-pull
+  namespace: nvidia-ai
+type: kubernetes.io/dockerconfigjson
+stringData:
+  .dockerconfigjson: |
+    {
+      "auths": {
+        "nvcr.io": {
+          "username": "\$oauthtoken",
+          "password": "${NGC_API_KEY}"
+        }
+      }
+    }
+EOF
+
+mkdir -p k8s/apps/nvidia-ai
+sops -e "$TEMP_DIR/nvidia-secrets.yaml" > k8s/apps/nvidia-ai/secrets.enc.yaml
+echo "  ✓ k8s/apps/nvidia-ai/secrets.enc.yaml"
+
+# -----------------------------------------------------------------------------
+# ArgoCD repo secrets
+# -----------------------------------------------------------------------------
+echo "Creating ArgoCD repo secrets..."
+cat > "$TEMP_DIR/argocd-secrets.yaml" <<EOF
+apiVersion: v1
+kind: Secret
+metadata:
+  name: repo-credentials
+  namespace: argocd
+  labels:
+    argocd.argoproj.io/secret-type: repository
+type: Opaque
+stringData:
+  type: git
+  url: https://github.com/${GITHUB_REPO}.git
+  username: git
+  password: "${GITHUB_PAT}"
+EOF
+
+mkdir -p k8s/apps/argocd-apps
+sops -e "$TEMP_DIR/argocd-secrets.yaml" > k8s/apps/argocd-apps/secrets.enc.yaml
+echo "  ✓ k8s/apps/argocd-apps/secrets.enc.yaml"
+
+# -----------------------------------------------------------------------------
+# Dagster secrets
+# -----------------------------------------------------------------------------
+echo "Creating Dagster secrets..."
+cat > "$TEMP_DIR/dagster-secrets.yaml" <<EOF
+apiVersion: v1
+kind: Secret
+metadata:
+  name: dagster-env-secrets
+  namespace: dagster
+type: Opaque
+stringData:
+  MINIO_ENDPOINT: "minio.minio.svc.cluster.local:9000"
+  MINIO_ACCESS_KEY: "${MINIO_ROOT_USER}"
+  MINIO_SECRET_KEY: "${MINIO_ROOT_PASSWORD}"
+  LAKEFS_ENDPOINT: "http://lakefs.lakefs.svc.cluster.local:8000"
+  LAKEFS_ACCESS_KEY_ID: "${LAKEFS_ACCESS_KEY_ID}"
+  LAKEFS_SECRET_ACCESS_KEY: "${LAKEFS_SECRET_ACCESS_KEY}"
+  NIM_ENDPOINT: "http://nim-llm.nvidia-ai.svc.cluster.local:8000"
+  NGC_API_KEY: "${NGC_API_KEY}"
+EOF
+
+mkdir -p k8s/apps/dagster
+sops -e "$TEMP_DIR/dagster-secrets.yaml" > k8s/apps/dagster/secrets.enc.yaml
+echo "  ✓ k8s/apps/dagster/secrets.enc.yaml"
+
+# -----------------------------------------------------------------------------
+# Marimo secrets (same access as Dagster)
+# -----------------------------------------------------------------------------
+echo "Creating Marimo secrets..."
+cat > "$TEMP_DIR/marimo-secrets.yaml" <<EOF
+apiVersion: v1
+kind: Secret
+metadata:
+  name: marimo-env-secrets
+  namespace: marimo
+type: Opaque
+stringData:
+  MINIO_ENDPOINT: "minio.minio.svc.cluster.local:9000"
+  MINIO_ACCESS_KEY: "${MINIO_ROOT_USER}"
+  MINIO_SECRET_KEY: "${MINIO_ROOT_PASSWORD}"
+  LAKEFS_ENDPOINT: "http://lakefs.lakefs.svc.cluster.local:8000"
+  LAKEFS_ACCESS_KEY_ID: "${LAKEFS_ACCESS_KEY_ID}"
+  LAKEFS_SECRET_ACCESS_KEY: "${LAKEFS_SECRET_ACCESS_KEY}"
+EOF
+
+mkdir -p k8s/apps/marimo
+sops -e "$TEMP_DIR/marimo-secrets.yaml" > k8s/apps/marimo/secrets.enc.yaml
+echo "  ✓ k8s/apps/marimo/secrets.enc.yaml"
+
+echo ""
+echo "=== All secrets created successfully! ==="
+echo ""
+echo "Verify with: sops -d k8s/apps/minio/secrets.enc.yaml"
+echo ""
+echo "To apply to cluster:"
+echo "  sops -d k8s/apps/minio/secrets.enc.yaml | kubectl apply -f -"
+echo ""

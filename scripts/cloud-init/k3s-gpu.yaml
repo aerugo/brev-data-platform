@@ -1,0 +1,65 @@
+#cloud-config
+# K3S + NVIDIA GPU Setup for Brev Instance
+# This script bootstraps a K3S cluster with GPU support
+
+package_update: true
+package_upgrade: false
+
+packages:
+  - curl
+  - wget
+  - git
+  - jq
+
+runcmd:
+  # Install K3S (disable traefik, we'll use port-forward)
+  - curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--disable traefik" sh -
+
+  # Wait for K3S to be ready
+  - sleep 30
+  - until kubectl get nodes; do echo "Waiting for K3S..."; sleep 5; done
+
+  # Install NVIDIA container toolkit (if not already present on Brev image)
+  - |
+    if ! command -v nvidia-ctk &> /dev/null; then
+      distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
+      curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+      curl -s -L https://nvidia.github.io/libnvidia-container/$distribution/libnvidia-container.list | \
+        sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+        tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+      apt-get update
+      apt-get install -y nvidia-container-toolkit
+    fi
+
+  # Configure containerd for NVIDIA runtime
+  - nvidia-ctk runtime configure --runtime=containerd
+  - systemctl restart containerd
+
+  # Wait for containerd restart
+  - sleep 10
+
+  # Deploy NVIDIA device plugin for Kubernetes
+  - kubectl apply -f https://raw.githubusercontent.com/NVIDIA/k8s-device-plugin/v0.14.5/nvidia-device-plugin.yml
+
+  # Label node for GPU scheduling
+  - kubectl label nodes --all nvidia.com/gpu.present=true --overwrite
+
+  # Create namespaces for all platform components
+  - |
+    for ns in argocd minio lakefs dagster marimo nvidia-ai; do
+      kubectl create namespace $ns --dry-run=client -o yaml | kubectl apply -f -
+    done
+
+  # Verify GPU is available to Kubernetes (wait for device plugin)
+  - sleep 60
+  - kubectl describe nodes | grep -A 5 "Allocatable" || true
+
+final_message: |
+  K3S with GPU support is ready!
+
+  Verify with:
+    kubectl get nodes
+    kubectl describe node | grep nvidia
+    nvidia-smi
+
+  GPU should show as allocatable resource.

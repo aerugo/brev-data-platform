@@ -1,4 +1,75 @@
+# Environment files
 .env
 .env.local
-*.enc.yaml
-!k8s/**/*.enc.yaml
+.env.*.local
+
+# Kubernetes
+kubeconfig.yaml
+kubeconfig*.yaml
+!kubeconfig.example.yaml
+
+# Secrets (unencrypted) - encrypted files ARE tracked
+**/secrets.yaml
+**/secret.yaml
+# Note: *.enc.yaml files ARE committed (they're encrypted)
+
+# Age keys - NEVER commit
+*.age
+keys.txt
+.config/sops/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+venv/
+.venv/
+env/
+*.egg-info/
+.eggs/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Terraform (if used later)
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+*.tfvars
+!*.tfvars.example
+crash.log
+
+# Helm
+k8s/apps/*/charts/
+*.tgz
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Docker
+.docker/
+
+# Node (if any JS tooling)
+node_modules/
+
+# Firebase
+firebase-debug.log
+.firebase/
