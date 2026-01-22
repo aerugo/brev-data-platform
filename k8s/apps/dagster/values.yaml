@@ -2,10 +2,6 @@
 # Uses the official Dagster Helm chart as a dependency
 
 dagster:
-  global:
-    # App version for image tags
-    appVersion: "1.12.11"
-
   # PostgreSQL for Dagster storage
   postgresql:
     enabled: true
@@ -26,10 +22,6 @@ dagster:
     service:
       type: ClusterIP
       port: 80
-    # Configure workspace to use our external ConfigMap
-    workspace:
-      enabled: true
-      externalConfigmap: dagster-workspace
 
   # Dagster daemon (schedules, sensors, run queue)
   dagsterDaemon:
@@ -50,8 +42,34 @@ dagster:
         imagePullPolicy: Always
         loadInclusterConfig: true
 
-  # Disable the built-in user-deployments subchart
-  # We manage our own user code deployment via templates
+  # User code deployments with custom code mounted from ConfigMap
   dagster-user-deployments:
-    enabled: false
-    enableSubchart: false
+    enabled: true
+    enableSubchart: true
+    deployments:
+      - name: "brev-user-code"
+        image:
+          # Use dagster-celery-k8s which has all dependencies
+          repository: "docker.io/dagster/dagster-celery-k8s"
+          tag: ~
+          pullPolicy: Always
+        dagsterApiGrpcArgs:
+          - "--python-file"
+          - "/opt/dagster/user-code/definitions.py"
+        port: 3030
+        resources:
+          requests:
+            memory: 256Mi
+            cpu: 100m
+          limits:
+            memory: 512Mi
+            cpu: 500m
+        # Mount our ConfigMap with the user code
+        volumes:
+          - name: user-code
+            configMap:
+              name: dagster-user-code
+        volumeMounts:
+          - name: user-code
+            mountPath: /opt/dagster/user-code
+            readOnly: true
