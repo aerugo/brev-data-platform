@@ -382,6 +382,68 @@ make create-secrets
 
 ---
 
+## CI/CD Setup
+
+GitHub Actions workflows provide continuous integration and delivery.
+
+### GitHub Repository Secrets
+
+Add the following secrets to enable CI workflows:
+
+**Via CLI (recommended):**
+```bash
+# Add SOPS Age key for secret validation
+gh secret set SOPS_AGE_KEY < ~/.config/sops/age/keys.txt
+```
+
+**Via GitHub UI:**
+1. Go to: Repository → Settings → Secrets and variables → Actions
+2. Click "New repository secret"
+3. Add:
+   | Secret Name | Value | Purpose |
+   |-------------|-------|---------|
+   | `SOPS_AGE_KEY` | Contents of `~/.config/sops/age/keys.txt` | Decrypt secrets in CI |
+
+### Enable GHCR Permissions
+
+Enable GitHub Actions to push container images to GitHub Container Registry:
+
+**Via CLI:**
+```bash
+# Enable read/write permissions for workflows
+gh api repos/OWNER/REPO/actions/permissions/workflow \
+  -X PUT \
+  -f default_workflow_permissions=write \
+  -F can_approve_pull_request_reviews=true
+```
+
+**Via GitHub UI:**
+1. Go to: Repository → Settings → Actions → General
+2. Under "Workflow permissions", select:
+   - [x] Read and write permissions
+   - [x] Allow GitHub Actions to create and approve pull requests (optional)
+3. Click Save
+
+### Workflows
+
+| Workflow | Trigger | Purpose |
+|----------|---------|---------|
+| `pr-checks.yml` | Pull request to main | Helm lint, secrets check, Dagster lint/test |
+| `dagster-build.yml` | Push to main (dagster/) | Build & push Dagster image to GHCR |
+| `validate-secrets.yml` | Changes to `*.enc.yaml` | Verify SOPS encryption is valid |
+
+### Branch Protection (Recommended)
+
+1. Go to: Repository → Settings → Branches → Add rule
+2. Branch name pattern: `main`
+3. Enable:
+   - [x] Require a pull request before merging
+   - [x] Require status checks to pass before merging
+     - Select: `helm-lint`, `secrets-check`, `dagster-check`
+   - [x] Require branches to be up to date before merging
+
+---
+
 ## Troubleshooting
 
 ### Brev CLI "logged out" error
