@@ -42,11 +42,34 @@ git submodule update --init --recursive
 
 ### Step 1: Install Required Tools
 
+**macOS (Homebrew):**
 ```bash
-# macOS with Homebrew
 brew install kubectl helm sops age brevdev/brev/brev
+```
 
-# Verify installations
+**Ubuntu/Debian:**
+```bash
+# kubectl
+curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl && rm kubectl
+
+# helm
+curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+# sops
+SOPS_VERSION=$(curl -s https://api.github.com/repos/getsops/sops/releases/latest | grep tag_name | cut -d '"' -f 4)
+curl -LO "https://github.com/getsops/sops/releases/download/${SOPS_VERSION}/sops-${SOPS_VERSION}.linux.amd64"
+sudo install -o root -g root -m 0755 sops-${SOPS_VERSION}.linux.amd64 /usr/local/bin/sops && rm sops-${SOPS_VERSION}.linux.amd64
+
+# age
+sudo apt-get update && sudo apt-get install -y age
+
+# brev
+curl -L https://raw.githubusercontent.com/brevdev/brev-cli/main/bin/install-latest.sh | bash
+```
+
+**Verify installations:**
+```bash
 kubectl version --client   # v1.28+
 helm version               # v3.13+
 sops --version             # v3.8+
@@ -70,9 +93,12 @@ mkdir -p ~/.config/sops/age
 # Generate key pair (if you don't have one)
 age-keygen -o ~/.config/sops/age/keys.txt
 
-# Add to shell profile (~/.zshrc or ~/.bashrc)
-echo 'export SOPS_AGE_KEY_FILE=$HOME/.config/sops/age/keys.txt' >> ~/.zshrc
-source ~/.zshrc
+# Add to shell profile
+# macOS (zsh):
+echo 'export SOPS_AGE_KEY_FILE=$HOME/.config/sops/age/keys.txt' >> ~/.zshrc && source ~/.zshrc
+
+# Ubuntu (bash):
+echo 'export SOPS_AGE_KEY_FILE=$HOME/.config/sops/age/keys.txt' >> ~/.bashrc && source ~/.bashrc
 ```
 
 ### Step 4: Configure Credentials (Before Setup)
