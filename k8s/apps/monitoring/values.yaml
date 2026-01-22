@@ -61,7 +61,7 @@ kube-prometheus-stack:
     additionalDataSources:
       - name: Loki
         type: loki
-        url: http://loki:3100
+        url: http://monitoring-loki:3100
         access: proxy
         isDefault: false
 
@@ -249,7 +249,7 @@ promtail:
 
   config:
     clients:
-      - url: http://loki:3100/loki/api/v1/push
+      - url: http://monitoring-loki:3100/loki/api/v1/push
 
     snippets:
       pipelineStages:
