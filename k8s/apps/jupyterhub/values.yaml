@@ -87,11 +87,11 @@ jupyterhub:
   # ==========================================================================
   singleuser:
     # Custom image with Marimo pre-installed
-    # Initially use jupyter/scipy-notebook, replace with custom image later
+    # Source: https://github.com/aerugo/jupyterhub-singleuser
     image:
-      name: quay.io/jupyterhub/k8s-singleuser-sample
-      tag: "4.3.2"
-      pullPolicy: IfNotPresent
+      name: ghcr.io/aerugo/jupyterhub-singleuser
+      tag: latest
+      pullPolicy: Always
 
     # Default resources (CPU profile)
     cpu:

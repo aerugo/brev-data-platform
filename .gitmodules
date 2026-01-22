@@ -1,0 +1,3 @@
+[submodule "docker/jupyterhub-singleuser"]
+	path = docker/jupyterhub-singleuser
+	url = https://github.com/aerugo/jupyterhub-singleuser.git
