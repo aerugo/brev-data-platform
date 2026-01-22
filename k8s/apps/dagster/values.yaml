@@ -42,34 +42,27 @@ dagster:
         imagePullPolicy: Always
         loadInclusterConfig: true
 
-  # User code deployments with custom code mounted from ConfigMap
+  # User code deployments with custom image from GHCR
   dagster-user-deployments:
     enabled: true
     enableSubchart: true
     deployments:
-      - name: "brev-user-code"
+      - name: "brev-pipelines"
         image:
-          # Use dagster-celery-k8s which has all dependencies
-          repository: "docker.io/dagster/dagster-celery-k8s"
-          tag: ~
+          repository: "ghcr.io/aerugo/brev-dagster-pipelines"
+          tag: "latest"
           pullPolicy: Always
         dagsterApiGrpcArgs:
-          - "--python-file"
-          - "/opt/dagster/user-code/definitions.py"
-        port: 3030
+          - "--module-name"
+          - "brev_pipelines.definitions"
+        port: 4000
         resources:
           requests:
-            memory: 256Mi
-            cpu: 100m
-          limits:
             memory: 512Mi
-            cpu: 500m
-        # Mount our ConfigMap with the user code
-        volumes:
-          - name: user-code
-            configMap:
-              name: dagster-user-code
-        volumeMounts:
-          - name: user-code
-            mountPath: /opt/dagster/user-code
-            readOnly: true
+            cpu: 250m
+          limits:
+            memory: 1Gi
+            cpu: 1000m
+        envFrom:
+          - secretRef:
+              name: dagster-env-secrets
