@@ -1,6 +1,6 @@
 # Brev Data Platform - Makefile
 .PHONY: help setup create-instance create-instance-help delete-instance start-instance stop-instance shell status \
-        kubeconfig ssh-tunnel bootstrap-rke2 bootstrap-k3s bootstrap-kai apply-secrets \
+        kubeconfig ssh-tunnel bootstrap-rke2 bootstrap-kai apply-secrets \
         port-forward-argocd port-forward-minio port-forward-lakefs \
         port-forward-dagster port-forward-marimo port-forward-nim \
         port-forward-grafana port-forward-prometheus port-forward-loki \
@@ -105,13 +105,6 @@ bootstrap-rke2: ## Bootstrap RKE2 with GPU support on remote instance (recommend
 	@echo "Next steps:"
 	@echo "  make kubeconfig"
 	@echo "  make bootstrap-kai"
-
-bootstrap-k3s: ## Bootstrap K3S with GPU support (deprecated, use bootstrap-rke2)
-	@echo "$(YELLOW)WARNING: K3S is deprecated. Use 'make bootstrap-rke2' for KAI Scheduler support.$(RESET)"
-	@echo "$(GREEN)Bootstrapping K3S on $(INSTANCE_NAME)...$(RESET)"
-	@echo "This will take a few minutes..."
-	scp -F $(SSH_CONFIG) scripts/bootstrap-k3s.sh $(INSTANCE_NAME)-host:/tmp/
-	ssh -F $(SSH_CONFIG) $(INSTANCE_NAME)-host 'chmod +x /tmp/bootstrap-k3s.sh && /tmp/bootstrap-k3s.sh'
 
 bootstrap-kai: ## Deploy KAI Scheduler for GPU workload scheduling
 	@echo "$(GREEN)Deploying KAI Scheduler v0.12.9 from NVIDIA OCI registry...$(RESET)"

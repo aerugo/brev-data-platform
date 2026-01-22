@@ -35,14 +35,14 @@ fi
 echo "=== Applying encrypted secrets to cluster ==="
 echo ""
 
-# List of secrets to apply
+# List of secrets to apply (secrets are in secrets/ subdirectories)
 SECRETS=(
-    "k8s/apps/minio/secrets.enc.yaml:minio"
-    "k8s/apps/lakefs/secrets.enc.yaml:lakefs"
-    "k8s/apps/nvidia-ai/secrets.enc.yaml:nvidia-ai"
-    "k8s/apps/argocd-apps/secrets.enc.yaml:argocd"
-    "k8s/apps/dagster/secrets.enc.yaml:dagster"
-    "k8s/apps/marimo/secrets.enc.yaml:marimo"
+    "k8s/apps/minio/secrets/secrets.enc.yaml:minio"
+    "k8s/apps/lakefs/secrets/secrets.enc.yaml:lakefs"
+    "k8s/apps/nvidia-ai/secrets/secrets.enc.yaml:nvidia-ai"
+    "k8s/apps/argocd-apps/secrets/secrets.enc.yaml:argocd"
+    "k8s/apps/dagster/secrets/secrets.enc.yaml:dagster"
+    "k8s/apps/marimo/secrets/secrets.enc.yaml:marimo"
 )
 
 for secret_entry in "${SECRETS[@]}"; do

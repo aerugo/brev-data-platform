@@ -50,13 +50,13 @@ metadata:
   namespace: minio
 type: Opaque
 stringData:
-  root-user: "${MINIO_ROOT_USER}"
-  root-password: "${MINIO_ROOT_PASSWORD}"
+  rootUser: "${MINIO_ROOT_USER}"
+  rootPassword: "${MINIO_ROOT_PASSWORD}"
 EOF
 
-mkdir -p k8s/apps/minio
-sops --config /dev/null --age "$AGE_PUBLIC_KEY" -e "$TEMP_DIR/minio-secrets.yaml" > k8s/apps/minio/secrets.enc.yaml
-echo "  ✓ k8s/apps/minio/secrets.enc.yaml"
+mkdir -p k8s/apps/minio/secrets
+sops --config /dev/null --age "$AGE_PUBLIC_KEY" -e "$TEMP_DIR/minio-secrets.yaml" > k8s/apps/minio/secrets/secrets.enc.yaml
+echo "  ✓ k8s/apps/minio/secrets/secrets.enc.yaml"
 
 # -----------------------------------------------------------------------------
 # LakeFS secrets
@@ -70,17 +70,24 @@ metadata:
   namespace: lakefs
 type: Opaque
 stringData:
-  access-key-id: "${LAKEFS_ACCESS_KEY_ID}"
-  secret-access-key: "${LAKEFS_SECRET_ACCESS_KEY}"
-  minio-access-key: "${MINIO_ROOT_USER}"
-  minio-secret-key: "${MINIO_ROOT_PASSWORD}"
-  # Encryption key for auth tokens (generate random)
-  auth-encrypt-secret-key: "$(openssl rand -hex 32)"
+  # Auth encryption key (required by LakeFS chart)
+  auth_encrypt_secret_key: "$(openssl rand -base64 32)"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: minio-credentials
+  namespace: lakefs
+type: Opaque
+stringData:
+  # MinIO credentials for S3 backend (same namespace for cross-reference)
+  rootUser: "${MINIO_ROOT_USER}"
+  rootPassword: "${MINIO_ROOT_PASSWORD}"
 EOF
 
-mkdir -p k8s/apps/lakefs
-sops --config /dev/null --age "$AGE_PUBLIC_KEY" -e "$TEMP_DIR/lakefs-secrets.yaml" > k8s/apps/lakefs/secrets.enc.yaml
-echo "  ✓ k8s/apps/lakefs/secrets.enc.yaml"
+mkdir -p k8s/apps/lakefs/secrets
+sops --config /dev/null --age "$AGE_PUBLIC_KEY" -e "$TEMP_DIR/lakefs-secrets.yaml" > k8s/apps/lakefs/secrets/secrets.enc.yaml
+echo "  ✓ k8s/apps/lakefs/secrets/secrets.enc.yaml"
 
 # -----------------------------------------------------------------------------
 # NVIDIA AI secrets
@@ -114,9 +121,9 @@ stringData:
     }
 EOF
 
-mkdir -p k8s/apps/nvidia-ai
-sops --config /dev/null --age "$AGE_PUBLIC_KEY" -e "$TEMP_DIR/nvidia-secrets.yaml" > k8s/apps/nvidia-ai/secrets.enc.yaml
-echo "  ✓ k8s/apps/nvidia-ai/secrets.enc.yaml"
+mkdir -p k8s/apps/nvidia-ai/secrets
+sops --config /dev/null --age "$AGE_PUBLIC_KEY" -e "$TEMP_DIR/nvidia-secrets.yaml" > k8s/apps/nvidia-ai/secrets/secrets.enc.yaml
+echo "  ✓ k8s/apps/nvidia-ai/secrets/secrets.enc.yaml"
 
 # -----------------------------------------------------------------------------
 # ArgoCD repo secrets
@@ -138,9 +145,9 @@ stringData:
   password: "${GITHUB_PAT}"
 EOF
 
-mkdir -p k8s/apps/argocd-apps
-sops --config /dev/null --age "$AGE_PUBLIC_KEY" -e "$TEMP_DIR/argocd-secrets.yaml" > k8s/apps/argocd-apps/secrets.enc.yaml
-echo "  ✓ k8s/apps/argocd-apps/secrets.enc.yaml"
+mkdir -p k8s/apps/argocd-apps/secrets
+sops --config /dev/null --age "$AGE_PUBLIC_KEY" -e "$TEMP_DIR/argocd-secrets.yaml" > k8s/apps/argocd-apps/secrets/secrets.enc.yaml
+echo "  ✓ k8s/apps/argocd-apps/secrets/secrets.enc.yaml"
 
 # -----------------------------------------------------------------------------
 # Dagster secrets
@@ -164,9 +171,9 @@ stringData:
   NGC_API_KEY: "${NGC_API_KEY}"
 EOF
 
-mkdir -p k8s/apps/dagster
-sops --config /dev/null --age "$AGE_PUBLIC_KEY" -e "$TEMP_DIR/dagster-secrets.yaml" > k8s/apps/dagster/secrets.enc.yaml
-echo "  ✓ k8s/apps/dagster/secrets.enc.yaml"
+mkdir -p k8s/apps/dagster/secrets
+sops --config /dev/null --age "$AGE_PUBLIC_KEY" -e "$TEMP_DIR/dagster-secrets.yaml" > k8s/apps/dagster/secrets/secrets.enc.yaml
+echo "  ✓ k8s/apps/dagster/secrets/secrets.enc.yaml"
 
 # -----------------------------------------------------------------------------
 # Marimo secrets (same access as Dagster)
@@ -188,15 +195,15 @@ stringData:
   LAKEFS_SECRET_ACCESS_KEY: "${LAKEFS_SECRET_ACCESS_KEY}"
 EOF
 
-mkdir -p k8s/apps/marimo
-sops --config /dev/null --age "$AGE_PUBLIC_KEY" -e "$TEMP_DIR/marimo-secrets.yaml" > k8s/apps/marimo/secrets.enc.yaml
-echo "  ✓ k8s/apps/marimo/secrets.enc.yaml"
+mkdir -p k8s/apps/marimo/secrets
+sops --config /dev/null --age "$AGE_PUBLIC_KEY" -e "$TEMP_DIR/marimo-secrets.yaml" > k8s/apps/marimo/secrets/secrets.enc.yaml
+echo "  ✓ k8s/apps/marimo/secrets/secrets.enc.yaml"
 
 echo ""
 echo "=== All secrets created successfully! ==="
 echo ""
-echo "Verify with: sops -d k8s/apps/minio/secrets.enc.yaml"
+echo "Verify with: sops -d k8s/apps/minio/secrets/secrets.enc.yaml"
 echo ""
-echo "To apply to cluster:"
-echo "  sops -d k8s/apps/minio/secrets.enc.yaml | kubectl apply -f -"
+echo "To apply all secrets to cluster:"
+echo "  make apply-secrets"
 echo ""
