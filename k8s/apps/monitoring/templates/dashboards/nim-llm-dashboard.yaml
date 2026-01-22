@@ -311,7 +311,7 @@ data:
             {
               "datasource": { "type": "prometheus", "uid": "prometheus" },
               "expr": "DCGM_FI_DEV_GPU_UTIL",
-              "legendFormat": "GPU {{gpu}}",
+              "legendFormat": "GPU {{ "{{" }}gpu{{ "}}" }}",
               "refId": "A"
             }
           ]
@@ -356,7 +356,7 @@ data:
             {
               "datasource": { "type": "prometheus", "uid": "prometheus" },
               "expr": "DCGM_FI_DEV_FB_USED",
-              "legendFormat": "GPU {{gpu}}",
+              "legendFormat": "GPU {{ "{{" }}gpu{{ "}}" }}",
               "refId": "A"
             }
           ]
@@ -407,7 +407,7 @@ data:
             {
               "datasource": { "type": "prometheus", "uid": "prometheus" },
               "expr": "DCGM_FI_DEV_POWER_USAGE",
-              "legendFormat": "GPU {{gpu}}",
+              "legendFormat": "GPU {{ "{{" }}gpu{{ "}}" }}",
               "refId": "A"
             }
           ]
