@@ -35,17 +35,18 @@ lakefs:
 
   # Environment variables for S3/MinIO credentials
   # LakeFS uses LAKEFS_ prefixed env vars to override config
+  # Note: MinIO creds are stored in lakefs-credentials secret (not minio-credentials)
   extraEnvVars:
     - name: LAKEFS_BLOCKSTORE_S3_CREDENTIALS_ACCESS_KEY_ID
       valueFrom:
         secretKeyRef:
-          name: minio-credentials
-          key: rootUser
+          name: lakefs-credentials
+          key: minio-access-key
     - name: LAKEFS_BLOCKSTORE_S3_CREDENTIALS_SECRET_ACCESS_KEY
       valueFrom:
         secretKeyRef:
-          name: minio-credentials
-          key: rootPassword
+          name: lakefs-credentials
+          key: minio-secret-key
 
   # Persistent volume for local database
   extraVolumes:
@@ -73,3 +74,7 @@ lakefs:
 
   # Use existing secret for credentials
   existingSecret: lakefs-credentials
+
+  # Map secret key names (our secret uses hyphens, chart defaults to underscores)
+  secretKeys:
+    authEncryptSecretKey: auth-encrypt-secret-key
