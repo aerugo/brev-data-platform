@@ -49,6 +49,15 @@ runtimeClassName: nvidia
 # Enables fractional GPU, gang scheduling, and topology-aware placement
 schedulerName: kai-scheduler
 
+# KAI Queue assignment for inference workloads
+# inference-queue has full GPU quota, priority 100
+podLabels:
+  kai.scheduler/queue: inference-queue
+
+# Priority class - inference is non-preemptible (value 125)
+# Can be preempted by batch-high (130) for Safe Synthesizer jobs
+priorityClassName: inference
+
 # KAI Scheduler annotations for fractional GPU allocation
 # Requests 70GB of GPU memory (H200 141GB: 70GB NIM + 70GB JupyterHub = 140GB)
 podAnnotations:

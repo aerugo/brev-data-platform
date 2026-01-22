@@ -133,3 +133,15 @@ readinessProbe:
     port: 8080
   initialDelaySeconds: 30
   periodSeconds: 10
+
+# Job configuration for Kubernetes Job-based synthesis
+# When enabled, Safe Synth runs as a Kubernetes Job instead of Deployment
+# Jobs use KAI Scheduler priority-based preemption to acquire GPU from NIM
+job:
+  enabled: false  # Set to true when launching via Dagster
+  runId: ""       # Unique identifier from Dagster run
+  priorityClassName: batch-high  # Value 130 > inference (125) for preemption
+  command: []     # Override container command if needed
+  args: []        # Override container args if needed
+  env: []         # Additional environment variables
+  inputConfigMap: ""  # ConfigMap with input data (optional)
