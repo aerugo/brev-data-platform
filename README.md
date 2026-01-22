@@ -357,6 +357,99 @@ Singleuser pods have MinIO and LakeFS credentials injected:
 
 ---
 
+## Observability
+
+The platform includes comprehensive observability for GPU workloads and LLM inference.
+
+### Components
+
+| Component | Purpose | Access |
+|-----------|---------|--------|
+| **Prometheus** | Metrics collection | http://localhost:9090 |
+| **Grafana** | Dashboards & visualization | http://localhost:3001 |
+| **Loki** | Log aggregation | Via Grafana |
+| **DCGM Exporter** | NVIDIA GPU metrics | Scraped by Prometheus |
+| **NIM Metrics** | LLM inference metrics | Scraped by Prometheus |
+
+### LLM Call Logging
+
+All NIM LLM requests are automatically logged with full prompts and responses. This enables:
+- Debugging unexpected LLM outputs
+- Quality monitoring of AI-generated content
+- Audit trail for compliance
+- Performance analysis
+
+**View LLM logs in Grafana:**
+
+```bash
+# Port forward Grafana
+make port-forward-grafana
+
+# Open http://localhost:3001
+# Navigate to: Explore → Select "Loki" datasource
+# Query: {app="nim-llm"} |~ "(prompt|completion)"
+```
+
+**Example Loki queries:**
+
+| Query | Purpose |
+|-------|---------|
+| `{app="nim-llm"}` | All NIM logs |
+| `{app="nim-llm"} \|= "error"` | Error logs only |
+| `{app="nim-llm"} \|~ "prompt"` | Requests with prompts |
+| `{namespace="dagster"} \|= "nim"` | Dagster logs mentioning NIM |
+
+### NIM LLM Metrics
+
+NIM exposes Prometheus metrics at `/metrics`:
+
+| Metric | Description |
+|--------|-------------|
+| `nim_request_total` | Total requests by status |
+| `nim_request_duration_seconds` | Request latency histogram |
+| `nim_token_total` | Tokens processed (prompt + completion) |
+
+**Grafana Dashboard:**
+
+Navigate to: Dashboards → Brev Data Platform → **NIM LLM Observability**
+
+The dashboard shows:
+- Request rate and error rate
+- Latency percentiles (P50, P95, P99)
+- Token throughput
+- GPU utilization and memory (from DCGM)
+- Recent LLM request logs
+
+### GPU Metrics
+
+GPU metrics are collected by DCGM Exporter:
+
+| Metric | Description |
+|--------|-------------|
+| `DCGM_FI_DEV_GPU_UTIL` | GPU utilization % |
+| `DCGM_FI_DEV_FB_USED` | GPU memory used (MB) |
+| `DCGM_FI_DEV_FB_FREE` | GPU memory free (MB) |
+| `DCGM_FI_DEV_POWER_USAGE` | Power consumption (W) |
+| `DCGM_FI_DEV_GPU_TEMP` | GPU temperature (°C) |
+
+**Example Prometheus queries:**
+
+```promql
+# GPU utilization
+DCGM_FI_DEV_GPU_UTIL
+
+# GPU memory used in GB
+DCGM_FI_DEV_FB_USED / 1024
+
+# NIM request rate
+rate(nim_request_total[5m])
+
+# NIM P95 latency in milliseconds
+histogram_quantile(0.95, rate(nim_request_duration_seconds_bucket[5m])) * 1000
+```
+
+---
+
 ## Secrets Management
 
 All secrets are encrypted with SOPS + Age before committing to git.

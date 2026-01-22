@@ -65,6 +65,21 @@ service:
   type: ClusterIP
   port: 8000
   # OpenAI-compatible endpoint at /v1/chat/completions
+  # Prometheus scraping annotations (metrics exposed at /metrics)
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8000"
+    prometheus.io/path: "/metrics"
+
+# Observability configuration
+observability:
+  # Enable ServiceMonitor for Prometheus Operator
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    # Label to match Prometheus Operator serviceMonitorSelector
+    labels:
+      release: monitoring
 
 # Environment variables per NVIDIA docs
 env:
@@ -80,6 +95,15 @@ env:
   # Logging level
   - name: NIM_LOG_LEVEL
     value: "INFO"
+  # Observability - Prometheus metrics endpoint at /metrics
+  - name: NIM_ENABLE_METRICS
+    value: "true"
+  # Observability - Log full prompts and responses to stdout (captured by Promtail → Loki)
+  - name: NIM_LOG_REQUESTS
+    value: "true"
+  # OpenTelemetry service name (for distributed tracing if Tempo enabled later)
+  - name: OTEL_SERVICE_NAME
+    value: "nim-llm"
 
 # Model cache persistence
 # GPT-OSS 120B is ~60GB quantized

@@ -4,6 +4,12 @@ metadata:
   name: nim-llm
   labels:
     app: nim-llm
+    app.kubernetes.io/name: nim-llm
+    app.kubernetes.io/component: inference
+  {{- with .Values.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   type: {{ .Values.service.type }}
   ports:
