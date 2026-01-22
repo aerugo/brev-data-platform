@@ -31,14 +31,16 @@ replicaCount: 1
 # GPU resources - using KAI Scheduler fractional GPU allocation
 # Llama 3.1 8B needs ~20GB VRAM, allocating 40GB for headroom
 # This allows sharing the A100 80GB with other workloads (e.g., JupyterHub GPU notebooks)
+# Note: nvidia.com/gpu: 1 is still required for device mounting; KAI annotation controls memory allocation
 resources:
   requests:
     memory: 32Gi
     cpu: 4
+    nvidia.com/gpu: 1
   limits:
     memory: 64Gi
     cpu: 8
-  # Note: GPU allocation handled by KAI Scheduler annotations below
+    nvidia.com/gpu: 1
 
 # Use NVIDIA RuntimeClass (created by bootstrap-rke2.sh)
 runtimeClassName: nvidia

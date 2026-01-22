@@ -8,6 +8,8 @@ metadata:
     app.kubernetes.io/component: inference
 spec:
   replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: nim-llm
