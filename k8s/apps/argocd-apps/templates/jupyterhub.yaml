@@ -8,10 +8,12 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "2"
     # Argo Image Updater annotations for automatic image updates
-    argocd-image-updater.argoproj.io/image-list: singleuser=ghcr.io/aerugo/jupyterhub-singleuser
-    argocd-image-updater.argoproj.io/singleuser.update-strategy: digest
+    # Monitor ghcr.io/aerugo/jupyterhub-singleuser:latest and update on new digest
+    argocd-image-updater.argoproj.io/image-list: singleuser=ghcr.io/aerugo/jupyterhub-singleuser:latest
+    argocd-image-updater.argoproj.io/singleuser.update-strategy: latest
     argocd-image-updater.argoproj.io/singleuser.helm.image-name: jupyterhub.singleuser.image.name
     argocd-image-updater.argoproj.io/singleuser.helm.image-tag: jupyterhub.singleuser.image.tag
+    argocd-image-updater.argoproj.io/singleuser.force-update: "true"
     argocd-image-updater.argoproj.io/write-back-method: argocd
   finalizers:
     - resources-finalizer.argocd.argoproj.io
