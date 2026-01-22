@@ -61,7 +61,7 @@ dagster:
           pullPolicy: Always
         dagsterApiGrpcArgs:
           - "--python-file"
-          - "/example_project/example_repo/repo.py"
+          - "/iris_analysis/definitions.py"
         port: 3030
         resources:
           requests:
