@@ -88,38 +88,105 @@ This interactive script will:
 - Setup SSH tunnel for kubectl access
 - Verify cluster connectivity and GPU availability
 
-### Step 6: Deploy Applications
+### Step 6: Deploy KAI Scheduler
 
 ```bash
-# Set kubeconfig (shown at end of setup)
-export KUBECONFIG=~/.kube/config-brev-data-platform-dev
+# Ensure SSH tunnel is running (in a separate terminal)
+make ssh-tunnel
 
 # Deploy KAI Scheduler for GPU workloads
 make bootstrap-kai
 
-# Apply encrypted secrets
-make apply-secrets
-
-# Deploy ArgoCD (manages all other applications)
-make bootstrap-argocd
+# Verify KAI Scheduler (7 pods should be running)
+kubectl get pods -n kai-scheduler
 ```
 
-### Step 7: Verify Installation
+### Step 7: Create Secrets from .env.local
+
+Before deploying applications, create the required secrets:
+
+```bash
+# 1. Copy and configure environment file
+cp .env.example .env.local
+# Edit .env.local with your credentials
+
+# 2. Create secrets manually (if you don't have the SOPS Age key)
+source .env.local
+
+# MinIO credentials
+kubectl create ns minio
+kubectl create secret generic minio-credentials -n minio \
+  --from-literal=rootUser="$MINIO_ROOT_USER" \
+  --from-literal=rootPassword="$MINIO_ROOT_PASSWORD"
+
+# LakeFS credentials (needs MinIO creds + auth key)
+kubectl create ns lakefs
+kubectl create secret generic minio-credentials -n lakefs \
+  --from-literal=rootUser="$MINIO_ROOT_USER" \
+  --from-literal=rootPassword="$MINIO_ROOT_PASSWORD"
+kubectl create secret generic lakefs-credentials -n lakefs \
+  --from-literal=auth_encrypt_secret_key="$(openssl rand -base64 32)"
+
+# ArgoCD GitHub repo access (for private repos)
+kubectl create ns argocd
+kubectl create secret generic repo-creds -n argocd \
+  --from-literal=url=https://github.com/aerugo/brev-data-platform.git \
+  --from-literal=username=git \
+  --from-literal=password="$GITHUB_PAT" \
+  -l argocd.argoproj.io/secret-type=repository
+```
+
+> **Note**: If you have the SOPS Age key configured, you can use `make apply-secrets` instead.
+
+### Step 8: Deploy ArgoCD
+
+```bash
+# Install ArgoCD
+make bootstrap-argocd
+
+# Wait for ArgoCD pods to be ready
+kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=argocd-server -n argocd --timeout=120s
+
+# Get ArgoCD password
+make argocd-password
+
+# Access ArgoCD UI (in another terminal)
+make port-forward-argocd
+# Open https://localhost:8080, login with admin/<password>
+```
+
+### Step 9: Verify Installation
 
 ```bash
 # Check cluster
 kubectl get nodes
 kubectl describe node | grep nvidia.com/gpu
 
-# Check KAI Scheduler
-kubectl get pods -n kube-system -l app.kubernetes.io/name=kai-scheduler
+# Check all pods
+kubectl get pods -A
 
-# Check ArgoCD
-kubectl get pods -n argocd
+# Check ArgoCD applications
+kubectl get applications -n argocd
 
-# Get ArgoCD password
-make argocd-password
+# Expected: All apps should show Synced/Healthy
 ```
+
+---
+
+## Current Status
+
+| Phase | Component | Status | Notes |
+|-------|-----------|--------|-------|
+| 3 | RKE2 + GPU | ✅ Complete | Enterprise K8s with NVIDIA device plugin |
+| 4 | KAI Scheduler | ✅ Complete | v0.12.9 from NVIDIA OCI registry |
+| 5 | ArgoCD | ✅ Complete | GitOps with app-of-apps pattern |
+| 6 | MinIO | ✅ Complete | 50Gi persistent storage |
+| 6 | LakeFS | ✅ Complete | 10Gi persistent storage |
+| 7 | Monitoring | 🔲 Pending | Prometheus/Grafana/Loki |
+| 8 | Dagster | 🔲 Pending | Pipeline orchestration |
+| 8 | Marimo | 🔲 Pending | Notebooks |
+| 9 | NVIDIA NIM | 🔲 Pending | LLM inference |
+| 9 | Safe Synthesizer | 🔲 Pending | Synthetic data |
 
 ---
 
@@ -307,8 +374,10 @@ brev login  # Re-authenticate
 # Make sure SSH tunnel is running
 make ssh-tunnel
 
-# In another terminal
-export KUBECONFIG=~/.kube/config-brev-data-platform-dev
+# In another terminal, set kubeconfig
+export KUBECONFIG=~/.kube/config
+
+# Test connection
 kubectl get nodes
 ```
 
@@ -318,7 +387,7 @@ kubectl get nodes
 export SOPS_AGE_KEY_FILE=$HOME/.config/sops/age/keys.txt
 
 # Test decryption
-sops -d k8s/apps/minio/secrets.enc.yaml
+sops -d k8s/apps/minio/secrets/secrets.enc.yaml
 ```
 
 ### RKE2 node not ready
@@ -339,6 +408,30 @@ kubectl logs -n kube-system -l app=nvidia-device-plugin-daemonset
 kubectl describe node | grep nvidia.com/gpu
 ```
 
+### ArgoCD sync fails with "ENC[AES256..." error
+ArgoCD is trying to apply SOPS-encrypted files as Kubernetes manifests.
+Encrypted secrets should be in `secrets/` subdirectories with `.argoignore` files.
+```bash
+# Check .argoignore exists
+cat k8s/apps/minio/.argoignore
+# Should contain: secrets/ and *.enc.yaml
+```
+
+### MinIO fails with "couldn't find key rootUser"
+The secret was created with wrong key names. MinIO expects `rootUser` and `rootPassword` (camelCase):
+```bash
+kubectl delete secret minio-credentials -n minio
+kubectl create secret generic minio-credentials -n minio \
+  --from-literal=rootUser="admin" \
+  --from-literal=rootPassword="your-password"
+```
+
+### LakeFS fails with "couldn't find key auth_encrypt_secret_key"
+```bash
+kubectl create secret generic lakefs-credentials -n lakefs \
+  --from-literal=auth_encrypt_secret_key="$(openssl rand -base64 32)"
+```
+
 ### Instance creation fails in CLI
 ```bash
 # The CLI only supports GCP which has limited GPU availability
@@ -352,39 +445,48 @@ make create-instance-help
 
 ```
 brev-data-platform/
-├── k8s/                    # Kubernetes manifests
-│   ├── bootstrap/          # ArgoCD installation
-│   └── apps/               # Application Helm charts
-│       ├── argocd-apps/    # App-of-apps definitions
-│       ├── kai-scheduler/  # KAI GPU Scheduler
-│       ├── minio/          # MinIO chart + secrets
-│       ├── lakefs/         # LakeFS chart + secrets
-│       ├── monitoring/     # Prometheus, Grafana, Loki, DCGM
-│       ├── dagster/        # Dagster chart + secrets
-│       ├── marimo/         # Marimo chart + secrets
-│       └── nvidia-ai/      # NIM + Safe Synthesizer
-├── dagster/                # Pipeline code
-│   ├── assets/             # Dagster assets
-│   ├── io_managers/        # Custom I/O managers
-│   └── resources/          # Dagster resources
-├── marimo/                 # Notebooks
-│   └── notebooks/          # Marimo notebook files
-├── scripts/                # Automation scripts
-│   ├── setup-instance.sh   # Interactive setup (used by make setup)
-│   ├── bootstrap-rke2.sh   # RKE2 + NVIDIA installation
-│   ├── bootstrap-argocd.sh # ArgoCD installation
-│   ├── create-secrets.sh   # SOPS secret generation
-│   └── apply-secrets.sh    # Apply secrets to cluster
-├── config/                 # Service configurations
-│   ├── nim/                # NIM LLM config
-│   └── safe-synthesizer/   # Safe Synth config
-├── docs/                   # Documentation
-│   ├── plans/              # Development plans
-│   └── invariants/         # Architectural constraints
-├── .sops.yaml              # SOPS encryption config
-├── .env.example            # Environment template
-├── .env.local              # Your credentials (git-ignored)
-└── Makefile                # All commands
+├── k8s/                        # Kubernetes manifests
+│   ├── bootstrap/              # Bootstrap configurations
+│   │   └── argocd/             # ArgoCD Helm values + app-of-apps
+│   └── apps/                   # Application Helm charts
+│       ├── argocd-apps/        # App-of-apps definitions (ArgoCD Applications)
+│       │   ├── templates/      # Individual app definitions
+│       │   └── secrets/        # SOPS encrypted secrets
+│       ├── kai-scheduler/      # KAI GPU Scheduler wrapper
+│       ├── minio/              # MinIO S3 storage
+│       │   ├── secrets/        # SOPS encrypted secrets
+│       │   └── .argoignore     # Excludes secrets from ArgoCD
+│       ├── lakefs/             # LakeFS data versioning
+│       │   ├── templates/      # PVC for persistence
+│       │   └── secrets/        # SOPS encrypted secrets
+│       ├── dagster/            # Dagster pipelines
+│       ├── marimo/             # Marimo notebooks
+│       ├── monitoring/         # Prometheus, Grafana, Loki
+│       ├── nvidia-nim/         # NIM LLM inference
+│       └── nvidia-safe-synth/  # Safe Synthesizer
+├── dagster/                    # Pipeline code
+│   ├── assets/                 # Dagster assets
+│   ├── io_managers/            # Custom I/O managers
+│   └── resources/              # Dagster resources
+├── marimo/                     # Notebooks
+│   └── notebooks/              # Marimo notebook files
+├── scripts/                    # Automation scripts
+│   ├── setup-instance.sh       # Interactive setup (make setup)
+│   ├── bootstrap-rke2.sh       # RKE2 + NVIDIA installation
+│   ├── bootstrap-argocd.sh     # ArgoCD installation
+│   ├── setup-kubeconfig.sh     # Fetch kubeconfig from instance
+│   ├── create-secrets.sh       # SOPS secret generation
+│   └── apply-secrets.sh        # Apply secrets to cluster
+├── config/                     # Service configurations
+│   ├── nim/                    # NIM LLM config
+│   └── safe-synthesizer/       # Safe Synth config
+├── docs/                       # Documentation
+│   ├── plans/                  # Development plans
+│   └── invariants/             # Architectural constraints
+├── .sops.yaml                  # SOPS encryption config
+├── .env.example                # Environment template
+├── .env.local                  # Your credentials (git-ignored)
+└── Makefile                    # All commands
 ```
 
 ---
