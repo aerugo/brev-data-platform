@@ -1,0 +1,124 @@
+# Weaviate Vector Database Configuration
+# Official chart: https://github.com/weaviate/weaviate-helm
+#
+# Configured for single-node development deployment
+# - No authentication (internal-only access)
+# - Persistent storage for vector index
+# - Resource limits per INV-K002
+
+weaviate:
+  # Single replica for development
+  replicas: 1
+
+  # Image configuration (pinned version per INV-K005)
+  image:
+    registry: cr.weaviate.io
+    repo: semitechnologies/weaviate
+    tag: 1.27.6
+
+  # Service configuration
+  service:
+    name: weaviate
+    type: ClusterIP
+    port: 8080
+    grpcPort: 50051
+    annotations:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "2112"
+      prometheus.io/path: "/metrics"
+
+  # Resource limits per INV-K002
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+
+  # Persistence configuration - REQUIRED for data durability
+  # Creates a PersistentVolumeClaim for the vector index
+  storage:
+    size: 20Gi
+    storageClassName: ""  # Use default storage class (Longhorn on Brev)
+
+  # Ensure persistence is enabled
+  persistence:
+    enabled: true
+    size: 20Gi
+    accessMode: ReadWriteOnce
+    # Note: Weaviate chart creates PVC automatically when persistence.enabled=true
+
+  # Environment configuration
+  env:
+    # Cluster configuration (single-node)
+    CLUSTER_HOSTNAME: "weaviate-0"
+    CLUSTER_JOIN: ""
+
+    # Module configuration
+    DEFAULT_VECTORIZER_MODULE: "none"
+    ENABLE_MODULES: ""
+
+    # Performance tuning for dev
+    QUERY_DEFAULTS_LIMIT: 20
+    QUERY_MAXIMUM_RESULTS: 10000
+
+    # Disable authentication for development
+    AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: "true"
+
+    # Telemetry (optional, can be disabled)
+    DISABLE_TELEMETRY: "true"
+
+    # Logging
+    LOG_LEVEL: "info"
+    LOG_FORMAT: "text"
+
+  # Disable authentication for development
+  # NOTE: For production, enable OIDC or API key auth
+  authentication:
+    anonymous_access:
+      enabled: true
+
+  # Disable authorization for development
+  authorization:
+    admin_list: []
+
+  # Liveness and readiness probes
+  livenessProbe:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+
+  readinessProbe:
+    enabled: true
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 5
+
+  # gRPC configuration for vector operations
+  grpcService:
+    enabled: true
+    type: ClusterIP
+    port: 50051
+
+  # Backups disabled for development
+  backups:
+    enabled: false
+
+  # Modules - using external embeddings, no vectorizer modules needed
+  modules:
+    # No text2vec modules - we generate embeddings externally via local NIM
+    text2vecContextionary:
+      enabled: false
+    text2vecTransformers:
+      enabled: false
+    text2vecOpenAI:
+      enabled: false
+    text2vecCohere:
+      enabled: false
+    # Generative module disabled - using NIM for generation
+    generativeOpenAI:
+      enabled: false
+    generativeCohere:
+      enabled: false

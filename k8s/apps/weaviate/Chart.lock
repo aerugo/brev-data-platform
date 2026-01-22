@@ -1,0 +1,6 @@
+dependencies:
+- name: weaviate
+  repository: https://weaviate.github.io/weaviate-helm
+  version: 17.4.0
+digest: sha256:3832349e60fcc3fc24bb66c572b8451a74c91586207fa12f41c4f7c82668ef1a
+generated: "2026-01-22T23:05:12.988864+01:00"
