@@ -35,10 +35,10 @@ data:
                   { "color": "green", "value": null }
                 ]
               },
-              "unit": "reqps"
+              "unit": "short"
             }
           },
-          "gridPos": { "h": 8, "w": 8, "x": 0, "y": 1 },
+          "gridPos": { "h": 8, "w": 6, "x": 0, "y": 1 },
           "id": 1,
           "options": {
             "colorMode": "value",
@@ -52,13 +52,13 @@ data:
             },
             "textMode": "auto"
           },
-          "title": "Request Rate",
+          "title": "Requests Running",
           "type": "stat",
           "targets": [
             {
               "datasource": { "type": "prometheus", "uid": "prometheus" },
-              "expr": "sum(rate(nim_request_total[5m]))",
-              "legendFormat": "Requests/sec",
+              "expr": "sum(num_requests_running)",
+              "legendFormat": "Running",
               "refId": "A"
             }
           ]
@@ -73,14 +73,14 @@ data:
                 "mode": "absolute",
                 "steps": [
                   { "color": "green", "value": null },
-                  { "color": "yellow", "value": 500 },
-                  { "color": "red", "value": 1000 }
+                  { "color": "yellow", "value": 100 },
+                  { "color": "red", "value": 500 }
                 ]
               },
               "unit": "ms"
             }
           },
-          "gridPos": { "h": 8, "w": 8, "x": 8, "y": 1 },
+          "gridPos": { "h": 8, "w": 6, "x": 6, "y": 1 },
           "id": 2,
           "options": {
             "colorMode": "value",
@@ -94,13 +94,13 @@ data:
             },
             "textMode": "auto"
           },
-          "title": "P95 Latency",
+          "title": "P95 Time to First Token",
           "type": "stat",
           "targets": [
             {
               "datasource": { "type": "prometheus", "uid": "prometheus" },
-              "expr": "histogram_quantile(0.95, sum(rate(nim_request_duration_seconds_bucket[5m])) by (le)) * 1000",
-              "legendFormat": "P95",
+              "expr": "histogram_quantile(0.95, sum(rate(time_to_first_token_seconds_bucket[5m])) by (le)) * 1000",
+              "legendFormat": "P95 TTFT",
               "refId": "A"
             }
           ]
@@ -120,7 +120,7 @@ data:
               "unit": "short"
             }
           },
-          "gridPos": { "h": 8, "w": 8, "x": 16, "y": 1 },
+          "gridPos": { "h": 8, "w": 6, "x": 12, "y": 1 },
           "id": 3,
           "options": {
             "colorMode": "value",
@@ -134,13 +134,58 @@ data:
             },
             "textMode": "auto"
           },
-          "title": "Token Throughput",
+          "title": "Token Throughput (Output)",
           "type": "stat",
           "targets": [
             {
               "datasource": { "type": "prometheus", "uid": "prometheus" },
-              "expr": "sum(rate(nim_token_total[5m]))",
+              "expr": "sum(rate(generation_tokens_total[5m]))",
               "legendFormat": "Tokens/sec",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "thresholds" },
+              "mappings": [],
+              "max": 1,
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 0.7 },
+                  { "color": "red", "value": 0.9 }
+                ]
+              },
+              "unit": "percentunit"
+            }
+          },
+          "gridPos": { "h": 8, "w": 6, "x": 18, "y": 1 },
+          "id": 10,
+          "options": {
+            "minVizHeight": 75,
+            "minVizWidth": 75,
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": ["lastNotNull"],
+              "fields": "",
+              "values": false
+            },
+            "showThresholdLabels": false,
+            "showThresholdMarkers": true,
+            "sizing": "auto"
+          },
+          "title": "GPU KV-Cache Usage",
+          "type": "gauge",
+          "targets": [
+            {
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "expr": "gpu_cache_usage_perc",
+              "legendFormat": "KV-Cache",
               "refId": "A"
             }
           ]
@@ -185,24 +230,24 @@ data:
             "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom" },
             "tooltip": { "mode": "multi", "sort": "desc" }
           },
-          "title": "Request Latency Distribution",
+          "title": "Time to First Token (TTFT)",
           "type": "timeseries",
           "targets": [
             {
               "datasource": { "type": "prometheus", "uid": "prometheus" },
-              "expr": "histogram_quantile(0.50, sum(rate(nim_request_duration_seconds_bucket[5m])) by (le)) * 1000",
+              "expr": "histogram_quantile(0.50, sum(rate(time_to_first_token_seconds_bucket[5m])) by (le)) * 1000",
               "legendFormat": "P50",
               "refId": "A"
             },
             {
               "datasource": { "type": "prometheus", "uid": "prometheus" },
-              "expr": "histogram_quantile(0.95, sum(rate(nim_request_duration_seconds_bucket[5m])) by (le)) * 1000",
+              "expr": "histogram_quantile(0.95, sum(rate(time_to_first_token_seconds_bucket[5m])) by (le)) * 1000",
               "legendFormat": "P95",
               "refId": "B"
             },
             {
               "datasource": { "type": "prometheus", "uid": "prometheus" },
-              "expr": "histogram_quantile(0.99, sum(rate(nim_request_duration_seconds_bucket[5m])) by (le)) * 1000",
+              "expr": "histogram_quantile(0.99, sum(rate(time_to_first_token_seconds_bucket[5m])) by (le)) * 1000",
               "legendFormat": "P99",
               "refId": "C"
             }
@@ -239,7 +284,7 @@ data:
                 "mode": "absolute",
                 "steps": [{ "color": "green", "value": null }]
               },
-              "unit": "reqps"
+              "unit": "s"
             }
           },
           "gridPos": { "h": 8, "w": 12, "x": 12, "y": 9 },
@@ -248,25 +293,145 @@ data:
             "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom" },
             "tooltip": { "mode": "multi", "sort": "desc" }
           },
-          "title": "Request Rate Over Time",
+          "title": "End-to-End Request Latency",
           "type": "timeseries",
           "targets": [
             {
               "datasource": { "type": "prometheus", "uid": "prometheus" },
-              "expr": "sum(rate(nim_request_total[5m]))",
-              "legendFormat": "Requests/sec",
+              "expr": "histogram_quantile(0.50, sum(rate(e2e_request_latency_seconds_bucket[5m])) by (le))",
+              "legendFormat": "P50",
               "refId": "A"
             },
             {
               "datasource": { "type": "prometheus", "uid": "prometheus" },
-              "expr": "sum(rate(nim_request_total{status=\"error\"}[5m]))",
-              "legendFormat": "Errors/sec",
+              "expr": "histogram_quantile(0.95, sum(rate(e2e_request_latency_seconds_bucket[5m])) by (le))",
+              "legendFormat": "P95",
+              "refId": "B"
+            },
+            {
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "expr": "histogram_quantile(0.99, sum(rate(e2e_request_latency_seconds_bucket[5m])) by (le))",
+              "legendFormat": "P99",
+              "refId": "C"
+            }
+          ]
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+                "insertNulls": false,
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": { "type": "linear" },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": { "group": "A", "mode": "none" },
+                "thresholdsStyle": { "mode": "off" }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{ "color": "green", "value": null }]
+              },
+              "unit": "short"
+            }
+          },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 17 },
+          "id": 11,
+          "options": {
+            "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom" },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          },
+          "title": "Token Throughput Over Time",
+          "type": "timeseries",
+          "targets": [
+            {
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "expr": "sum(rate(prompt_tokens_total[5m]))",
+              "legendFormat": "Input Tokens/sec",
+              "refId": "A"
+            },
+            {
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "expr": "sum(rate(generation_tokens_total[5m]))",
+              "legendFormat": "Output Tokens/sec",
               "refId": "B"
             }
           ]
         },
         {
-          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 17 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+                "insertNulls": false,
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": { "type": "linear" },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": { "group": "A", "mode": "none" },
+                "thresholdsStyle": { "mode": "off" }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{ "color": "green", "value": null }]
+              },
+              "unit": "short"
+            }
+          },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 17 },
+          "id": 12,
+          "options": {
+            "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom" },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          },
+          "title": "Concurrent Requests",
+          "type": "timeseries",
+          "targets": [
+            {
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "expr": "num_requests_running",
+              "legendFormat": "Running",
+              "refId": "A"
+            },
+            {
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "expr": "num_requests_waiting",
+              "legendFormat": "Waiting",
+              "refId": "B"
+            }
+          ]
+        },
+        {
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 25 },
           "id": 101,
           "title": "GPU Metrics (from DCGM)",
           "type": "row"
@@ -290,7 +455,7 @@ data:
               "unit": "percent"
             }
           },
-          "gridPos": { "h": 8, "w": 8, "x": 0, "y": 18 },
+          "gridPos": { "h": 8, "w": 8, "x": 0, "y": 26 },
           "id": 6,
           "options": {
             "minVizHeight": 75,
@@ -311,7 +476,7 @@ data:
             {
               "datasource": { "type": "prometheus", "uid": "prometheus" },
               "expr": "DCGM_FI_DEV_GPU_UTIL",
-              "legendFormat": "GPU {{ "{{" }}gpu{{ "}}" }}",
+              "legendFormat": "GPU {{ \"{{\" }}gpu{{ \"}}\" }}",
               "refId": "A"
             }
           ]
@@ -335,7 +500,7 @@ data:
               "unit": "decmbytes"
             }
           },
-          "gridPos": { "h": 8, "w": 8, "x": 8, "y": 18 },
+          "gridPos": { "h": 8, "w": 8, "x": 8, "y": 26 },
           "id": 7,
           "options": {
             "minVizHeight": 75,
@@ -356,7 +521,7 @@ data:
             {
               "datasource": { "type": "prometheus", "uid": "prometheus" },
               "expr": "DCGM_FI_DEV_FB_USED",
-              "legendFormat": "GPU {{ "{{" }}gpu{{ "}}" }}",
+              "legendFormat": "GPU {{ \"{{\" }}gpu{{ \"}}\" }}",
               "refId": "A"
             }
           ]
@@ -395,7 +560,7 @@ data:
               "unit": "watt"
             }
           },
-          "gridPos": { "h": 8, "w": 8, "x": 16, "y": 18 },
+          "gridPos": { "h": 8, "w": 8, "x": 16, "y": 26 },
           "id": 8,
           "options": {
             "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom" },
@@ -407,20 +572,20 @@ data:
             {
               "datasource": { "type": "prometheus", "uid": "prometheus" },
               "expr": "DCGM_FI_DEV_POWER_USAGE",
-              "legendFormat": "GPU {{ "{{" }}gpu{{ "}}" }}",
+              "legendFormat": "GPU {{ \"{{\" }}gpu{{ \"}}\" }}",
               "refId": "A"
             }
           ]
         },
         {
-          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 26 },
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 34 },
           "id": 102,
           "title": "LLM Request Logs (from Loki)",
           "type": "row"
         },
         {
           "datasource": { "type": "loki", "uid": "loki" },
-          "gridPos": { "h": 10, "w": 24, "x": 0, "y": 27 },
+          "gridPos": { "h": 10, "w": 24, "x": 0, "y": 35 },
           "id": 9,
           "options": {
             "dedupStrategy": "none",
@@ -432,12 +597,12 @@ data:
             "sortOrder": "Descending",
             "wrapLogMessage": true
           },
-          "title": "Recent LLM Requests (Prompts & Responses)",
+          "title": "NIM LLM Logs",
           "type": "logs",
           "targets": [
             {
               "datasource": { "type": "loki", "uid": "loki" },
-              "expr": "{app=\"nim-llm\"} |~ \"(prompt|completion|request|response)\"",
+              "expr": "{app=\"nim-llm\"} |~ \"(POST|chat|completions|error|Error)\"",
               "legendFormat": "",
               "refId": "A"
             }
@@ -452,5 +617,5 @@ data:
       "timezone": "browser",
       "title": "NIM LLM Observability",
       "uid": "nim-llm-observability",
-      "version": 1
+      "version": 2
     }

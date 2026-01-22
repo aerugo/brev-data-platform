@@ -16,10 +16,15 @@
 4. No additional infrastructure needed - just enable NIM's native capabilities
 
 **Key environment variables for NIM observability**:
-- `NIM_ENABLE_METRICS=true` - Exposes `/metrics` endpoint
-- `NIM_LOG_REQUESTS=true` - Logs full prompt/response to stdout
+- `NIM_ENABLE_METRICS=true` - Exposes `/v1/metrics` endpoint (Prometheus format)
+- `NIM_LOG_REQUESTS=true` - Logs HTTP access info (method, path, status code) to stdout
 - `NIM_LOG_LEVEL=INFO` - Appropriate verbosity (DEBUG too noisy for production)
 - `OTEL_SERVICE_NAME=nim-llm` - For distributed tracing (optional)
+
+**Important**: `NIM_LOG_REQUESTS` does NOT log actual prompt/response content - only HTTP access logs. For full prompt/response logging, you would need:
+1. OpenTelemetry tracing with a span backend (like Tempo)
+2. A reverse proxy/middleware that logs requests
+3. Application-level logging in the client code
 
 **Decision**: Use NIM's native observability rather than adding external tools like Langfuse or custom wrappers. This aligns with the NVIDIA Enterprise stack approach and avoids adding complexity.
 
@@ -73,15 +78,52 @@
 
 ---
 
+---
+
+### 2026-01-22 - Debugging & Metric Corrections
+
+**Issues found during testing:**
+
+1. **Metrics endpoint path**: NIM exposes metrics at `/v1/metrics`, not `/metrics`
+   - Fixed ServiceMonitor path and service annotations
+
+2. **Incorrect metric names in dashboard**: Initial dashboard used guessed metric names
+   - Original: `nim_request_total`, `nim_request_duration_seconds_bucket`, `nim_token_total`
+   - Actual NIM metrics:
+     - `prompt_tokens_total` - prefill tokens processed
+     - `generation_tokens_total` - generation tokens processed
+     - `time_to_first_token_seconds_bucket` - TTFT histogram
+     - `time_per_output_token_seconds_bucket` - inter-token latency histogram
+     - `e2e_request_latency_seconds_bucket` - end-to-end latency histogram
+     - `num_requests_running` / `num_requests_waiting` - concurrent request counts
+     - `gpu_cache_usage_perc` - KV cache usage percentage
+
+3. **Loki datasource UID**: Dashboard referenced `uid: loki` but datasource had no fixed UID
+   - Added `uid: loki` to Loki datasource in monitoring values
+
+4. **Helm template escaping**: Dashboard JSON with `{{gpu}}` broke Helm templating
+   - Fixed with `{{ "{{" }}gpu{{ "}}" }}` escaping
+
+5. **Prompt/response logging limitation**: `NIM_LOG_REQUESTS=true` only logs HTTP access info (method, path, status), NOT actual prompts/responses
+
+**Files updated:**
+- `k8s/apps/nvidia-nim/values.yaml` - Fixed service annotation path
+- `k8s/apps/nvidia-nim/templates/servicemonitor.yaml` - Fixed metrics path to `/v1/metrics`
+- `k8s/apps/monitoring/values.yaml` - Added `uid: loki` to Loki datasource
+- `k8s/apps/monitoring/templates/dashboards/nim-llm-dashboard.yaml` - Fixed all metric names
+
+---
+
 ## Implementation Notes
 
 - Used ServiceMonitor CRD instead of raw scrape configs for cleaner Prometheus Operator integration
 - Dashboard uses `grafana_dashboard: "1"` label for automatic sidecar pickup
-- Logs panel queries `{app="nim-llm"}` - may need adjustment based on actual label naming
+- Logs panel queries `{app="nim-llm"}` - shows HTTP access logs only (not prompt content)
+- Metrics endpoint at `/v1/metrics` per NVIDIA NIM documentation
 
 ## Blockers & Issues
 
-(None)
+- **Prompt/response logging**: NIM does not natively support logging full prompt/response content. For this capability, additional infrastructure would be needed (OpenTelemetry tracing, proxy middleware, or application-level logging).
 
 ## References
 
