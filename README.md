@@ -229,12 +229,17 @@ brev stop brev-data-platform-dev
 All services are accessed via kubectl port-forward through SSH tunnel:
 
 ```bash
-# Terminal 1: Keep SSH tunnel running
-make ssh-tunnel
+# Terminal 1: Start SSH tunnel in background (shows all credentials)
+make ssh-tunnel-bg
 
 # Terminal 2: Port forward all services (recommended)
 export KUBECONFIG=~/.kube/config-brev-data-platform-dev
 make port-forward-all
+```
+
+**View all credentials at any time:**
+```bash
+make all-credentials
 ```
 
 | Service | Local URL | Credentials |
@@ -242,9 +247,9 @@ make port-forward-all
 | ArgoCD | https://localhost:8080 | admin / `make argocd-password` |
 | JupyterHub | http://localhost:8000 | Any username / any password |
 | Dagster | http://localhost:3000 | N/A |
-| LakeFS | http://localhost:8001 | See `.env.local` |
-| MinIO | http://localhost:9001 | See `.env.local` |
-| NIM LLM | http://localhost:8002 | N/A (API endpoint) |
+| LakeFS | http://localhost:8001 | `make lakefs-credentials` |
+| MinIO | http://localhost:9001 | `make minio-credentials` |
+| NIM LLM | http://localhost:8002 | N/A (OpenAI-compatible API) |
 | Grafana | http://localhost:3001 | admin / `make grafana-password` |
 | Prometheus | http://localhost:9090 | N/A |
 
@@ -269,7 +274,8 @@ make destroy                 # Alias for delete-instance
 make bootstrap-rke2          # Install RKE2 + NVIDIA on instance
 make bootstrap-kai           # Deploy KAI Scheduler
 make kubeconfig              # Fetch kubeconfig from instance
-make ssh-tunnel              # Start SSH tunnel (foreground)
+make ssh-tunnel              # Start SSH tunnel (foreground, shows service info)
+make ssh-tunnel-bg           # Start SSH tunnel (background, shows credentials)
 make apply-secrets           # Apply encrypted secrets to cluster
 make bootstrap-argocd        # Install ArgoCD
 
@@ -292,11 +298,14 @@ make validate-k8s            # K8s validation only (no Dagster)
 make create-secrets          # Generate encrypted secrets from .env.local
 make edit-secret FILE=...    # Edit encrypted secret in place
 
-# Passwords
+# Credentials
+make all-credentials         # Show all service URLs and credentials
 make argocd-password         # Get ArgoCD admin password
 make grafana-password        # Get Grafana admin password
+make minio-credentials       # Get MinIO root user/password
+make lakefs-credentials      # Get LakeFS access key/secret
 
-# Validation
+# Linting
 make lint                    # Lint Helm and Python
 make validate                # Validate configurations
 ```
