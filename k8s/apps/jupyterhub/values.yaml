@@ -163,6 +163,21 @@ jupyterhub:
           extra_annotations:
             kai.scheduler.nvidia.com/gpu-memory: "70Gi"
 
+    # Network policy - allow egress to platform services
+    networkPolicy:
+      enabled: true
+      egress:
+        # Allow access to all cluster services (NIM LLM, MinIO, LakeFS, etc.)
+        - to:
+            - namespaceSelector: {}  # All namespaces in cluster
+          ports:
+            - port: 8000  # NIM LLM, LakeFS
+              protocol: TCP
+            - port: 9000  # MinIO API
+              protocol: TCP
+            - port: 9001  # MinIO Console
+              protocol: TCP
+
   # ==========================================================================
   # Scheduling - Disable default user-scheduler (use KAI instead)
   # ==========================================================================
