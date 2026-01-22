@@ -1,0 +1,131 @@
+# NVIDIA NeMo Safe Synthesizer Helm Chart Values
+# Based on official NVIDIA documentation:
+# https://docs.nvidia.com/nemo/microservices/latest/generate-private-synthetic-data/
+#
+# Configured for H200 GPU (141GB VRAM)
+# - Safe Synthesizer requires 80GB VRAM (H200 exceeds this requirement)
+# - Full local deployment with GPU inference
+# - Differential privacy-preserving synthetic data generation
+#
+# For smaller GPUs (T4/A100-40GB), use values-api-only.yaml
+
+# Deployment mode: local (GPU inference) or api-only
+mode: local
+
+# NeMo Safe Synthesizer container from NGC
+image:
+  repository: nvcr.io/nvidia/nemo-microservices/safe-synthesizer
+  tag: "25.01"
+  pullPolicy: IfNotPresent
+
+# NGC image pull secret (created by apply-secrets.sh)
+imagePullSecrets:
+  - name: ngc-image-pull
+
+replicaCount: 1
+
+# GPU resources for H200 (141GB VRAM)
+# Safe Synthesizer recommends 80GB, H200 has 141GB
+resources:
+  requests:
+    memory: 64Gi
+    cpu: 8
+    nvidia.com/gpu: 1
+  limits:
+    memory: 128Gi
+    cpu: 16
+    nvidia.com/gpu: 1
+
+# Use NVIDIA RuntimeClass (created by bootstrap-rke2.sh)
+runtimeClassName: nvidia
+
+# KAI Scheduler for GPU workloads (Phase 3.5)
+# Enables fractional GPU, gang scheduling, and topology-aware placement
+schedulerName: kai-scheduler
+
+# Tolerations for GPU nodes
+tolerations:
+  - key: nvidia.com/gpu
+    operator: Exists
+    effect: NoSchedule
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 8080
+  # API Endpoints:
+  # - POST /jobs - Create synthesis job
+  # - GET /jobs - List jobs
+  # - GET /jobs/{job_id} - Get job status
+  # - GET /jobs/{job_id}/results/{result_id}/download - Download results
+
+# NVIDIA API configuration (backup/alternative)
+api:
+  # NVIDIA hosted API endpoint (used if local fails)
+  baseUrl: "https://integrate.api.nvidia.com/v1"
+  # Secret containing NGC_API_KEY
+  secretName: ngc-credentials
+  secretKey: NGC_API_KEY
+
+# Environment variables
+env:
+  - name: NGC_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: ngc-credentials
+        key: NGC_API_KEY
+  - name: LOG_LEVEL
+    value: "INFO"
+  - name: SAFE_SYNTH_MODE
+    value: "local"
+  # Model cache location
+  - name: MODEL_CACHE_PATH
+    value: "/data/models"
+
+# ConfigMap for synthesis configuration
+config:
+  # Default job settings
+  defaultJobConfig:
+    # Privacy settings (differential privacy)
+    epsilon: 1.0  # Lower = more privacy, less utility
+    delta: 1e-5
+    piiReplacement: true
+
+    # Generation settings
+    temperature: 0.7
+    maxRecords: 10000
+    batchSize: 100
+
+    # Evaluation settings (privacy attack tests)
+    runMiaEvaluation: true   # Membership Inference Attack
+    runAiaEvaluation: true   # Attribute Inference Attack
+
+# Data persistence for models and job results
+persistence:
+  enabled: true
+  size: 100Gi  # Models + intermediate data + results
+  mountPath: /data
+  accessMode: ReadWriteOnce
+
+# Health probes - models take time to load
+startupProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 120
+  periodSeconds: 15
+  failureThreshold: 40  # Allow 10 minutes for model loading
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 30
+  periodSeconds: 15
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 30
+  periodSeconds: 10

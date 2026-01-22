@@ -1,4 +1,4 @@
-# Phase 9: Sample Pipeline & Validation
+# Phase 11: Sample Pipeline & Validation
 
 **Status**: Pending
 **Started**:
@@ -577,7 +577,7 @@ echo "=== Full Stack Validation ==="
 echo "1. Brev Instance:"
 brev ls | grep brev-data-platform-dev
 
-echo "2. K3S Cluster:"
+echo "2. RKE2 Cluster:"
 kubectl get nodes
 
 echo "3. All Pods:"
@@ -607,7 +607,7 @@ echo "=== Validation Complete ==="
 
 ### Infrastructure
 - [ ] Brev instance running
-- [ ] K3S cluster healthy
+- [ ] RKE2 cluster healthy
 - [ ] GPU available and allocated
 
 ### Storage
@@ -660,7 +660,7 @@ echo "=== Validation Complete ==="
 
 The Brev Data Platform is now fully deployed and validated. You have:
 
-1. **Infrastructure**: GPU-enabled K3S cluster on Brev
+1. **Infrastructure**: GPU-enabled RKE2 cluster on Brev
 2. **GitOps**: ArgoCD managing all applications
 3. **Storage**: MinIO + LakeFS for versioned data lake
 4. **Orchestration**: Dagster running data pipelines

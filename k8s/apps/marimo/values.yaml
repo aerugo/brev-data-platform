@@ -1,0 +1,29 @@
+# Marimo Helm Chart Values
+# Custom chart for Marimo notebooks
+
+image:
+  repository: marimo-dev/marimo
+  tag: "0.9.0"
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+
+resources:
+  requests:
+    memory: 512Mi
+    cpu: 250m
+  limits:
+    memory: 2Gi
+    cpu: 1000m
+
+service:
+  type: ClusterIP
+  port: 2718
+
+persistence:
+  enabled: true
+  size: 5Gi
+  mountPath: /home/marimo/notebooks
+
+# Environment variables from secret
+envFromSecret: marimo-env-secrets

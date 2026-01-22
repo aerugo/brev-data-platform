@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: marimo
+  labels:
+    app: marimo
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: marimo
+  template:
+    metadata:
+      labels:
+        app: marimo
+    spec:
+      containers:
+        - name: marimo
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["marimo", "edit", "--host", "0.0.0.0", "--port", "2718", "--no-token"]
+          ports:
+            - containerPort: 2718
+              name: http
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          envFrom:
+            - secretRef:
+                name: {{ .Values.envFromSecret }}
+                optional: true
+          volumeMounts:
+            - name: notebooks
+              mountPath: {{ .Values.persistence.mountPath }}
+      volumes:
+        - name: notebooks
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: marimo-notebooks
+          {{- else }}
+          emptyDir: {}
+          {{- end }}

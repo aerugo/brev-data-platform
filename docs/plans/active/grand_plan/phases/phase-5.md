@@ -1,4 +1,4 @@
-# Phase 4: ArgoCD Bootstrap
+# Phase 5: ArgoCD Bootstrap
 
 **Status**: Pending
 **Started**:
@@ -452,4 +452,4 @@ kubectl get applications -n argocd
 
 ## Next Phase
 
-Once ArgoCD is running, proceed to [Phase 5: Storage Layer](phase-5.md) to deploy MinIO and LakeFS.
+Once ArgoCD is running, proceed to [Phase 6: Storage Layer](phase-6.md) to deploy MinIO and LakeFS.

@@ -1,4 +1,4 @@
-# Phase 8: CI/CD Workflows
+# Phase 10: CI/CD Workflows
 
 **Status**: Pending
 **Started**:
@@ -509,4 +509,4 @@ Go to: GitHub Repo → Settings → Branches → Add rule
 
 ## Next Phase
 
-Once CI/CD is configured, proceed to [Phase 9: Sample Pipeline & Validation](phase-9.md) for end-to-end testing.
+Once CI/CD is configured, proceed to [Phase 11: Sample Pipeline & Validation](phase-11.md) for end-to-end testing.

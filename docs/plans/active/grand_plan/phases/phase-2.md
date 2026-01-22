@@ -433,4 +433,4 @@ git status | grep -v ".enc.yaml" | grep "secrets" && echo "WARNING: Unencrypted 
 
 ## Next Phase
 
-Once secrets are configured, proceed to [Phase 3: Brev Instance + K3S](phase-3.md).
+Once secrets are configured, proceed to [Phase 3: Brev Instance + RKE2](phase-3.md).

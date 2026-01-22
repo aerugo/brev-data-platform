@@ -1,0 +1,114 @@
+# NVIDIA NIM LLM Helm Chart Values
+# Based on official NVIDIA documentation:
+# https://docs.nvidia.com/nim/large-language-models/latest/deploy-helm.html
+#
+# Configured for H200 GPU (141GB VRAM)
+# Default model: OpenAI GPT-OSS 120B
+# - 117B parameters (MoE, activates 5.1B per token)
+# - MXFP4 quantized - fits on single 80GB GPU
+# - Apache 2.0 license, 128K context window
+# - Configurable reasoning effort (low/medium/high)
+#
+# Sources:
+# - https://openai.com/index/introducing-gpt-oss/
+# - https://huggingface.co/openai/gpt-oss-120b
+
+# Container image - OpenAI GPT-OSS 120B
+image:
+  # Available models:
+  # - nvcr.io/nim/openai/gpt-oss-120b:latest     (120B, recommended)
+  # - nvcr.io/nim/openai/gpt-oss-20b:latest      (20B, faster inference)
+  # - nvcr.io/nim/meta/llama-3.1-70b-instruct    (70B, alternative)
+  repository: nvcr.io/nim/openai/gpt-oss-120b
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+# NGC image pull secret (created by apply-secrets.sh)
+imagePullSecrets:
+  - name: ngc-image-pull
+
+replicaCount: 1
+
+# GPU resources for H200 (141GB VRAM)
+# GPT-OSS 120B uses ~80GB with MXFP4 quantization
+resources:
+  requests:
+    memory: 64Gi
+    cpu: 8
+    nvidia.com/gpu: 1
+  limits:
+    memory: 128Gi
+    cpu: 16
+    nvidia.com/gpu: 1
+
+# Use NVIDIA RuntimeClass (created by bootstrap-rke2.sh)
+runtimeClassName: nvidia
+
+# KAI Scheduler for GPU workloads (Phase 3.5)
+# Enables fractional GPU, gang scheduling, and topology-aware placement
+schedulerName: kai-scheduler
+
+# Tolerations for GPU nodes
+tolerations:
+  - key: nvidia.com/gpu
+    operator: Exists
+    effect: NoSchedule
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 8000
+  # OpenAI-compatible endpoint at /v1/chat/completions
+
+# Environment variables per NVIDIA docs
+env:
+  # NGC API key for model downloads
+  - name: NGC_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: ngc-credentials
+        key: NGC_API_KEY
+  # Model cache location
+  - name: NIM_CACHE_PATH
+    value: "/opt/nim/.cache"
+  # Logging level
+  - name: NIM_LOG_LEVEL
+    value: "INFO"
+  # GPT-OSS reasoning effort: low, medium, high
+  - name: GPT_OSS_REASONING_EFFORT
+    value: "medium"
+
+# Model cache persistence
+# GPT-OSS 120B is ~60GB quantized
+persistence:
+  enabled: true
+  size: 150Gi
+  mountPath: /opt/nim/.cache
+  accessMode: ReadWriteOnce
+
+# Health probes - MoE models load faster than dense models
+startupProbe:
+  httpGet:
+    path: /v1/health/ready
+    port: 8000
+  initialDelaySeconds: 90
+  periodSeconds: 15
+  failureThreshold: 30  # Allow 7.5 minutes for model loading
+
+livenessProbe:
+  httpGet:
+    path: /v1/health/live
+    port: 8000
+  initialDelaySeconds: 30
+  periodSeconds: 15
+
+readinessProbe:
+  httpGet:
+    path: /v1/health/ready
+    port: 8000
+  initialDelaySeconds: 30
+  periodSeconds: 10
+
+# API fallback disabled - H200 runs GPT-OSS 120B locally
+apiFallback:
+  enabled: false

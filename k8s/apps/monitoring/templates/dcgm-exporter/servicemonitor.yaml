@@ -1,0 +1,22 @@
+{{- if .Values.dcgmExporter.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: dcgm-exporter
+  labels:
+    app: dcgm-exporter
+    app.kubernetes.io/name: dcgm-exporter
+    app.kubernetes.io/component: gpu-metrics
+    release: {{ .Release.Name }}
+spec:
+  selector:
+    matchLabels:
+      app: dcgm-exporter
+  endpoints:
+    - port: metrics
+      interval: 15s
+      scrapeTimeout: 10s
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+{{- end }}

@@ -1,0 +1,17 @@
+apiVersion: v2
+name: nvidia-safe-synth
+description: NVIDIA NeMo Safe Synthesizer for privacy-preserving synthetic data generation
+type: application
+version: 0.2.0
+appVersion: "25.01"
+
+# Safe Synthesizer Requirements
+# - GPU: 80GB VRAM minimum (H100/A100-80GB/H200)
+# - RAM: 64GB+ recommended
+# - Disk: 100GB+ for models and results
+#
+# Default configuration: H200 (141GB VRAM) - full local deployment
+# For smaller GPUs, use values-api-only.yaml
+#
+# Documentation:
+# https://docs.nvidia.com/nemo/microservices/latest/generate-private-synthetic-data/

@@ -1,4 +1,4 @@
-# Phase 6: Data Platform (Dagster + Marimo)
+# Phase 8: Data Platform (Dagster + Marimo)
 
 **Status**: Pending
 **Started**:
@@ -63,7 +63,7 @@ dagster:
     persistence:
       enabled: true
       size: 10Gi
-      storageClass: local-path
+      storageClass: local-path  # Installed by RKE2 bootstrap script
 
   # Dagster webserver
   dagsterWebserver:
@@ -676,4 +676,4 @@ make port-forward-marimo
 
 ## Next Phase
 
-Once Dagster and Marimo are running, proceed to [Phase 7: NVIDIA AI Enterprise](phase-7.md).
+Once Dagster and Marimo are running, proceed to [Phase 9: NVIDIA AI Enterprise](phase-9.md).

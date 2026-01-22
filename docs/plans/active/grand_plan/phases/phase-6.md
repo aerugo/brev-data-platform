@@ -1,4 +1,4 @@
-# Phase 5: Storage Layer (MinIO + LakeFS)
+# Phase 6: Storage Layer (MinIO + LakeFS)
 
 **Status**: Pending
 **Started**:
@@ -71,7 +71,7 @@ minio:
   persistence:
     enabled: true
     size: 100Gi
-    storageClass: local-path  # K3S default
+    storageClass: local-path  # RKE2/K3S default
 
   # Root credentials from secret
   existingSecret: minio-credentials
@@ -458,4 +458,4 @@ curl -sf -u "$LAKEFS_KEY:$LAKEFS_SECRET" http://localhost:8000/api/v1/repositori
 
 ## Next Phase
 
-Once storage layer is running, proceed to [Phase 6: Data Platform](phase-6.md) to deploy Dagster and Marimo.
+Once storage layer is running, proceed to [Phase 7: Observability Stack](phase-7.md) to deploy monitoring and logging.

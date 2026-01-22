@@ -1,0 +1,50 @@
+# Dagster Helm Chart Values
+# Uses the official Dagster Helm chart as a dependency
+
+dagster:
+  # Global settings
+  global:
+    serviceAccountName: dagster
+
+  # PostgreSQL for Dagster storage (use embedded for simplicity)
+  postgresql:
+    enabled: true
+    postgresqlPassword: dagster
+    postgresqlDatabase: dagster
+
+  # Dagster webserver (UI)
+  dagsterWebserver:
+    replicaCount: 1
+    resources:
+      requests:
+        memory: 256Mi
+        cpu: 100m
+      limits:
+        memory: 512Mi
+        cpu: 500m
+    service:
+      type: ClusterIP
+      port: 3000
+
+  # Dagster daemon (schedules, sensors)
+  dagsterDaemon:
+    enabled: true
+    resources:
+      requests:
+        memory: 256Mi
+        cpu: 100m
+      limits:
+        memory: 512Mi
+        cpu: 500m
+
+  # Run launcher configuration
+  runLauncher:
+    type: K8sRunLauncher
+    config:
+      k8sRunLauncher:
+        envSecrets:
+          - name: dagster-env-secrets
+
+  # User code deployments (will be configured later)
+  dagsterUserDeployments:
+    enabled: false

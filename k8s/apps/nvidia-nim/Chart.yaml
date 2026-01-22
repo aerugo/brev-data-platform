@@ -1,0 +1,17 @@
+apiVersion: v2
+name: nvidia-nim
+description: NVIDIA NIM LLM inference service for Brev Data Platform
+type: application
+version: 0.1.0
+appVersion: "1.15.4"
+
+# GPU Compatibility Notes:
+# - T4 (16GB): Only smallest models (Llama 3.2 1B, Gemma 2 2B) may work
+# - A10G (24GB): Llama 3.1 8B and similar
+# - A100 (40-80GB): Full model support
+#
+# See docs/plans/active/grand_plan/phases/phase-7-nvidia-ai.md for details
+#
+# Official nim-llm chart can be fetched from NGC:
+# helm fetch https://helm.ngc.nvidia.com/nim/charts/nim-llm-1.15.4.tgz \
+#   --username='$oauthtoken' --password=$NGC_API_KEY

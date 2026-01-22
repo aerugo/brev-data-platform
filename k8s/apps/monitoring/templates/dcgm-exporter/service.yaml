@@ -1,0 +1,23 @@
+{{- if .Values.dcgmExporter.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: dcgm-exporter
+  labels:
+    app: dcgm-exporter
+    app.kubernetes.io/name: dcgm-exporter
+    app.kubernetes.io/component: gpu-metrics
+  annotations:
+    {{- with .Values.dcgmExporter.service.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.dcgmExporter.service.port }}
+      targetPort: metrics
+      protocol: TCP
+      name: metrics
+  selector:
+    app: dcgm-exporter
+{{- end }}

@@ -1,0 +1,272 @@
+# Observability Stack for brev-data-platform
+# Configured for H200 GPU monitoring with DCGM Exporter
+#
+# Components:
+# - Prometheus: Metrics collection and alerting
+# - Grafana: Visualization and dashboards
+# - Loki: Log aggregation
+# - Promtail: Log shipping
+# - DCGM Exporter: NVIDIA GPU metrics
+
+# DCGM Exporter configuration (custom, not from dependency)
+dcgmExporter:
+  enabled: true
+  image:
+    repository: nvcr.io/nvidia/k8s/dcgm-exporter
+    tag: "3.3.5-3.4.0-ubuntu22.04"
+    pullPolicy: IfNotPresent
+
+  # Run on GPU nodes only
+  nodeSelector:
+    nvidia.com/gpu.present: "true"
+
+  tolerations:
+    - key: nvidia.com/gpu
+      operator: Exists
+      effect: NoSchedule
+
+  # Metrics to collect (default DCP metrics)
+  arguments:
+    - "-f"
+    - "/etc/dcgm-exporter/dcp-metrics-included.csv"
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+  service:
+    port: 9400
+    annotations:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "9400"
+
+# kube-prometheus-stack configuration
+kube-prometheus-stack:
+  enabled: true
+
+  # Grafana configuration
+  grafana:
+    enabled: true
+    adminPassword: ""  # Set via secret or generate random
+
+    persistence:
+      enabled: true
+      size: 10Gi
+
+    # Additional data sources (Loki)
+    additionalDataSources:
+      - name: Loki
+        type: loki
+        url: http://loki:3100
+        access: proxy
+        isDefault: false
+
+    # Dashboard providers
+    dashboardProviders:
+      dashboardproviders.yaml:
+        apiVersion: 1
+        providers:
+          - name: 'custom'
+            orgId: 1
+            folder: 'Brev Data Platform'
+            type: file
+            disableDeletion: false
+            editable: true
+            options:
+              path: /var/lib/grafana/dashboards/custom
+
+    # Resource limits
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+    # Service configuration
+    service:
+      type: ClusterIP
+      port: 80
+
+  # Prometheus configuration
+  prometheus:
+    prometheusSpec:
+      retention: 15d
+      retentionSize: 50GB
+
+      # Storage
+      storageSpec:
+        volumeClaimTemplate:
+          spec:
+            accessModes: ["ReadWriteOnce"]
+            resources:
+              requests:
+                storage: 50Gi
+
+      # Resource limits
+      resources:
+        requests:
+          cpu: 500m
+          memory: 2Gi
+        limits:
+          cpu: 2000m
+          memory: 4Gi
+
+      # Additional scrape configs for DCGM Exporter
+      additionalScrapeConfigs:
+        - job_name: 'dcgm-exporter'
+          kubernetes_sd_configs:
+            - role: endpoints
+              namespaces:
+                names:
+                  - monitoring
+          relabel_configs:
+            - source_labels: [__meta_kubernetes_service_name]
+              action: keep
+              regex: dcgm-exporter
+            - source_labels: [__meta_kubernetes_endpoint_port_name]
+              action: keep
+              regex: metrics
+
+    service:
+      type: ClusterIP
+      port: 9090
+
+  # Alertmanager (disabled by default, enable when needed)
+  alertmanager:
+    enabled: false
+
+  # Node Exporter for system metrics
+  nodeExporter:
+    enabled: true
+
+  # kube-state-metrics for K8s object metrics
+  kubeStateMetrics:
+    enabled: true
+
+  # Disable default rules we don't need
+  defaultRules:
+    create: true
+    rules:
+      alertmanager: false
+      etcd: false
+      configReloaders: false
+      general: true
+      k8s: true
+      kubeApiserverAvailability: false
+      kubeApiserverBurnrate: false
+      kubeApiserverHistogram: false
+      kubeApiserverSlos: false
+      kubeControllerManager: false
+      kubelet: true
+      kubeProxy: false
+      kubePrometheusGeneral: true
+      kubePrometheusNodeRecording: true
+      kubernetesApps: true
+      kubernetesResources: true
+      kubernetesStorage: true
+      kubernetesSystem: true
+      kubeSchedulerAlerting: false
+      kubeSchedulerRecording: false
+      kubeStateMetrics: true
+      network: true
+      node: true
+      nodeExporterAlerting: true
+      nodeExporterRecording: true
+      prometheus: true
+      prometheusOperator: false
+
+# Loki configuration (log aggregation)
+loki:
+  enabled: true
+
+  loki:
+    auth_enabled: false
+
+    # Single tenant mode
+    commonConfig:
+      replication_factor: 1
+
+    # Storage configuration (filesystem for single-node)
+    storage:
+      type: filesystem
+
+    # Schema configuration
+    schemaConfig:
+      configs:
+        - from: "2024-01-01"
+          store: tsdb
+          object_store: filesystem
+          schema: v13
+          index:
+            prefix: index_
+            period: 24h
+
+    # Limits
+    limits_config:
+      retention_period: 168h  # 7 days
+      max_query_length: 721h
+      max_query_parallelism: 32
+      ingestion_rate_mb: 10
+      ingestion_burst_size_mb: 20
+
+  # Single binary mode for simplicity
+  deploymentMode: SingleBinary
+  singleBinary:
+    replicas: 1
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+
+    persistence:
+      enabled: true
+      size: 50Gi
+
+  # Disable distributed components
+  backend:
+    replicas: 0
+  read:
+    replicas: 0
+  write:
+    replicas: 0
+
+  # Gateway disabled in single binary mode
+  gateway:
+    enabled: false
+
+# Promtail configuration (log shipping)
+promtail:
+  enabled: true
+
+  config:
+    clients:
+      - url: http://loki:3100/loki/api/v1/push
+
+    snippets:
+      pipelineStages:
+        - cri: {}
+        - multiline:
+            firstline: '^\d{4}-\d{2}-\d{2}'
+            max_wait_time: 3s
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+  # Run on all nodes
+  tolerations:
+    - operator: Exists
+      effect: NoSchedule

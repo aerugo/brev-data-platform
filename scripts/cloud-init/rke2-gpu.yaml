@@ -1,0 +1,120 @@
+#cloud-config
+# RKE2 + GPU Bootstrap Cloud-Init Script
+# For use with Brev instances that support cloud-init user-data
+#
+# This script:
+# 1. Installs RKE2 Kubernetes
+# 2. Installs NVIDIA Container Toolkit
+# 3. Configures containerd for GPU support
+# 4. Deploys NVIDIA Device Plugin
+# 5. Creates required namespaces
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - curl
+  - jq
+  - git
+
+write_files:
+  # RKE2 Configuration
+  - path: /etc/rancher/rke2/config.yaml
+    content: |
+      # RKE2 Server Configuration
+      disable:
+        - rke2-ingress-nginx
+      write-kubeconfig-mode: "0644"
+      kubelet-arg:
+        - "feature-gates=DevicePlugins=true"
+    permissions: '0644'
+
+  # NVIDIA RuntimeClass
+  - path: /tmp/nvidia-runtime-class.yaml
+    content: |
+      apiVersion: node.k8s.io/v1
+      kind: RuntimeClass
+      metadata:
+        name: nvidia
+      handler: nvidia
+    permissions: '0644'
+
+runcmd:
+  # Install RKE2
+  - curl -sfL https://get.rke2.io | sh -
+  - systemctl enable rke2-server.service
+  - systemctl start rke2-server.service
+
+  # Wait for RKE2 to be ready
+  - |
+    echo "Waiting for RKE2..."
+    until /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get nodes 2>/dev/null; do
+      sleep 10
+    done
+
+  # Setup kubectl
+  - ln -sf /var/lib/rancher/rke2/bin/kubectl /usr/local/bin/kubectl
+  - mkdir -p /root/.kube
+  - cp /etc/rancher/rke2/rke2.yaml /root/.kube/config
+
+  # Install NVIDIA Container Toolkit
+  - curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+  - |
+    curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
+      sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+      tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+  - apt-get update
+  - apt-get install -y nvidia-container-toolkit
+
+  # Configure containerd for NVIDIA
+  - nvidia-ctk runtime configure --runtime=containerd --config=/var/lib/rancher/rke2/agent/etc/containerd/config.toml.tmpl --set-as-default || true
+
+  # Restart RKE2 to apply containerd changes
+  - systemctl restart rke2-server.service
+  - sleep 30
+
+  # Wait for node to be ready
+  - |
+    until /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get nodes | grep -q "Ready"; do
+      sleep 10
+    done
+
+  # Install NVIDIA Device Plugin
+  - /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f https://raw.githubusercontent.com/NVIDIA/k8s-device-plugin/v0.14.5/nvidia-device-plugin.yml
+
+  # Create RuntimeClass
+  - /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f /tmp/nvidia-runtime-class.yaml
+
+  # Label node for GPU scheduling
+  - |
+    NODE=$(/var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get nodes -o jsonpath='{.items[0].metadata.name}')
+    /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml label nodes $NODE nvidia.com/gpu.present=true --overwrite
+
+  # Install local-path-provisioner (RKE2 doesn't include it by default unlike K3S)
+  - /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.26/deploy/local-path-storage.yaml
+  - sleep 10
+  - /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml patch storageclass local-path -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
+
+  # Create namespaces
+  - /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml create namespace argocd || true
+  - /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml create namespace minio || true
+  - /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml create namespace lakefs || true
+  - /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml create namespace dagster || true
+  - /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml create namespace marimo || true
+  - /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml create namespace nvidia-ai || true
+  - /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml create namespace monitoring || true
+
+  # Setup kubeconfig for brev user
+  - |
+    if id "brev" &>/dev/null; then
+      mkdir -p /home/brev/.kube
+      cp /etc/rancher/rke2/rke2.yaml /home/brev/.kube/config
+      chown -R brev:brev /home/brev/.kube
+    fi
+
+  - echo "RKE2 + GPU bootstrap complete!"
+
+final_message: |
+  RKE2 with GPU support is ready!
+  Kubeconfig: /etc/rancher/rke2/rke2.yaml
+  kubectl: /var/lib/rancher/rke2/bin/kubectl

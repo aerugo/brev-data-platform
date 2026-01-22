@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: safe-synth-config
+  labels:
+    app: safe-synth
+data:
+  config.yaml: |
+    # Safe Synthesizer Configuration
+    mode: {{ .Values.mode | default "local" }}
+
+    # Privacy settings
+    privacy:
+      epsilon: {{ .Values.config.defaultJobConfig.epsilon | default 1.0 }}
+      delta: {{ .Values.config.defaultJobConfig.delta | default "1e-5" }}
+      pii_replacement: {{ .Values.config.defaultJobConfig.piiReplacement | default true }}
+
+    # Generation settings
+    generation:
+      temperature: {{ .Values.config.defaultJobConfig.temperature | default 0.7 }}
+      max_records: {{ .Values.config.defaultJobConfig.maxRecords | default 10000 }}
+      batch_size: {{ .Values.config.defaultJobConfig.batchSize | default 100 }}
+
+    # Evaluation settings
+    evaluation:
+      mia_evaluation: {{ .Values.config.defaultJobConfig.runMiaEvaluation | default true }}
+      aia_evaluation: {{ .Values.config.defaultJobConfig.runAiaEvaluation | default true }}
+
+    # Storage paths
+    storage:
+      model_cache: /data/models
+      job_results: /data/results
+      temp_data: /data/temp

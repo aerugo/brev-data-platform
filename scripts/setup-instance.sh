@@ -3,10 +3,14 @@
 # Brev Data Platform - Interactive Setup Script
 # =============================================================================
 # This script guides you through the complete setup process:
-# 1. Instance creation (manual via Brev web console)
-# 2. RKE2 + GPU bootstrap
-# 3. Kubeconfig setup
-# 4. SSH tunnel configuration
+# 1. Instance creation (manual via Brev web console) or selection
+# 2. Stack status check (for existing instances)
+# 3. RKE2 + GPU bootstrap (if needed)
+# 4. Kubeconfig setup
+# 5. SSH tunnel configuration
+#
+# For existing instances with stack already deployed, the script detects this
+# and offers to skip directly to kubeconfig/tunnel setup.
 #
 # Usage:
 #   ./scripts/setup-instance.sh
@@ -65,6 +69,7 @@ else
 
     if [ "$INSTANCE_COUNT" -eq 0 ]; then
         # No instances - guide user through creation
+        NEW_INSTANCE=true
         echo -e "${YELLOW}No instances found. Let's create one!${NC}"
         echo ""
         echo -e "${CYAN}Step 1: Set Instance Name${NC}"
@@ -166,8 +171,113 @@ fi
 echo -e "${GREEN}Instance is running!${NC}"
 
 # =============================================================================
-# Step 3: Wait for SSH to be ready
+# Step 3: Check stack status (for existing instances)
 # =============================================================================
+
+check_stack_status() {
+    echo ""
+    echo -e "${CYAN}Checking stack status...${NC}"
+
+    local rke2_status="not installed"
+    local kai_status="not deployed"
+    local argocd_status="not deployed"
+    local apps_status="not deployed"
+
+    # Check RKE2
+    if ssh -F "$SSH_CONFIG" -o ConnectTimeout=5 "${INSTANCE_NAME}-host" "test -f /var/lib/rancher/rke2/bin/kubectl" 2>/dev/null; then
+        rke2_status="installed"
+
+        # Check if kubectl works (API server running)
+        if ssh -F "$SSH_CONFIG" "${INSTANCE_NAME}-host" "sudo /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get nodes" &>/dev/null; then
+            rke2_status="running"
+
+            # Check KAI Scheduler
+            if ssh -F "$SSH_CONFIG" "${INSTANCE_NAME}-host" "sudo /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get ns kai-scheduler" &>/dev/null; then
+                kai_pods=$(ssh -F "$SSH_CONFIG" "${INSTANCE_NAME}-host" "sudo /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get pods -n kai-scheduler --no-headers 2>/dev/null | grep -c Running" || echo "0")
+                if [ "$kai_pods" -gt 0 ]; then
+                    kai_status="running ($kai_pods pods)"
+                else
+                    kai_status="deployed (not running)"
+                fi
+            fi
+
+            # Check ArgoCD
+            if ssh -F "$SSH_CONFIG" "${INSTANCE_NAME}-host" "sudo /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get ns argocd" &>/dev/null; then
+                argocd_pods=$(ssh -F "$SSH_CONFIG" "${INSTANCE_NAME}-host" "sudo /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get pods -n argocd --no-headers 2>/dev/null | grep -c Running" || echo "0")
+                if [ "$argocd_pods" -gt 0 ]; then
+                    argocd_status="running ($argocd_pods pods)"
+
+                    # Check deployed apps
+                    app_count=$(ssh -F "$SSH_CONFIG" "${INSTANCE_NAME}-host" "sudo /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get applications -n argocd --no-headers 2>/dev/null | wc -l" || echo "0")
+                    if [ "$app_count" -gt 0 ]; then
+                        apps_status="$app_count apps"
+                    fi
+                else
+                    argocd_status="deployed (not running)"
+                fi
+            fi
+        fi
+    fi
+
+    echo ""
+    echo -e "${CYAN}=========================================${NC}"
+    echo -e "${CYAN}  Stack Status${NC}"
+    echo -e "${CYAN}=========================================${NC}"
+    echo ""
+    echo -e "  RKE2 Kubernetes:  ${GREEN}${rke2_status}${NC}"
+    echo -e "  KAI Scheduler:    ${GREEN}${kai_status}${NC}"
+    echo -e "  ArgoCD:           ${GREEN}${argocd_status}${NC}"
+    echo -e "  ArgoCD Apps:      ${GREEN}${apps_status}${NC}"
+    echo ""
+
+    # Determine what's needed
+    if [ "$rke2_status" = "not installed" ]; then
+        echo -e "${YELLOW}RKE2 needs to be installed. Full setup required.${NC}"
+        STACK_STATUS="fresh"
+    elif [ "$argocd_status" = "not deployed" ]; then
+        echo -e "${YELLOW}ArgoCD not deployed. Bootstrap required.${NC}"
+        STACK_STATUS="needs_bootstrap"
+    else
+        echo -e "${GREEN}Stack appears to be fully deployed!${NC}"
+        STACK_STATUS="complete"
+    fi
+
+    echo ""
+    echo -e "${CYAN}What would you like to do?${NC}"
+    echo ""
+    echo "  1) Run full setup (re-bootstrap everything)"
+    echo "  2) Skip to kubeconfig + SSH tunnel only"
+    echo "  3) Exit"
+    echo ""
+    read -r -p "Choice [2]: " SETUP_CHOICE
+    SETUP_CHOICE="${SETUP_CHOICE:-2}"
+
+    case "$SETUP_CHOICE" in
+        1)
+            SKIP_BOOTSTRAP=false
+            echo -e "${GREEN}Will run full setup...${NC}"
+            ;;
+        2)
+            SKIP_BOOTSTRAP=true
+            echo -e "${GREEN}Skipping to kubeconfig setup...${NC}"
+            ;;
+        3)
+            echo -e "${YELLOW}Exiting.${NC}"
+            exit 0
+            ;;
+        *)
+            SKIP_BOOTSTRAP=true
+            echo -e "${GREEN}Skipping to kubeconfig setup...${NC}"
+            ;;
+    esac
+}
+
+# =============================================================================
+# Step 4: Wait for SSH to be ready
+# =============================================================================
+
+# Track if this is a new instance (user just created it)
+NEW_INSTANCE="${NEW_INSTANCE:-false}"
 
 echo ""
 echo -e "${CYAN}Waiting for SSH to be ready...${NC}"
@@ -196,26 +306,37 @@ if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
 fi
 
 # =============================================================================
-# Step 4: Check if RKE2 is already installed
+# Step 5: Check stack status (for existing instances)
 # =============================================================================
 
-echo ""
-echo -e "${CYAN}Checking for existing RKE2 installation...${NC}"
+if [ "$NEW_INSTANCE" != "true" ]; then
+    check_stack_status
+fi
 
-RKE2_INSTALLED=$(ssh -F "$SSH_CONFIG" "${INSTANCE_NAME}-host" "test -f /var/lib/rancher/rke2/bin/kubectl && echo 'yes' || echo 'no'" 2>/dev/null)
+# =============================================================================
+# Step 6: Check if RKE2 is already installed (for new instances)
+# =============================================================================
 
-if [ "$RKE2_INSTALLED" = "yes" ]; then
-    echo -e "${GREEN}RKE2 is already installed!${NC}"
+# Only check RKE2 if SKIP_BOOTSTRAP wasn't already set by stack status check
+if [ -z "$SKIP_BOOTSTRAP" ]; then
     echo ""
-    read -r -p "Re-run bootstrap script? (y/N): " RERUN
-    if [ "$RERUN" != "y" ] && [ "$RERUN" != "Y" ]; then
-        echo "Skipping bootstrap, continuing with kubeconfig setup..."
-        SKIP_BOOTSTRAP=true
+    echo -e "${CYAN}Checking for existing RKE2 installation...${NC}"
+
+    RKE2_INSTALLED=$(ssh -F "$SSH_CONFIG" "${INSTANCE_NAME}-host" "test -f /var/lib/rancher/rke2/bin/kubectl && echo 'yes' || echo 'no'" 2>/dev/null)
+
+    if [ "$RKE2_INSTALLED" = "yes" ]; then
+        echo -e "${GREEN}RKE2 is already installed!${NC}"
+        echo ""
+        read -r -p "Re-run bootstrap script? (y/N): " RERUN
+        if [ "$RERUN" != "y" ] && [ "$RERUN" != "Y" ]; then
+            echo "Skipping bootstrap, continuing with kubeconfig setup..."
+            SKIP_BOOTSTRAP=true
+        fi
     fi
 fi
 
 # =============================================================================
-# Step 5: Bootstrap RKE2
+# Step 7: Bootstrap RKE2
 # =============================================================================
 
 if [ "$SKIP_BOOTSTRAP" != "true" ]; then
@@ -235,7 +356,7 @@ if [ "$SKIP_BOOTSTRAP" != "true" ]; then
 fi
 
 # =============================================================================
-# Step 6: Fetch kubeconfig
+# Step 8: Fetch kubeconfig
 # =============================================================================
 
 echo ""
@@ -253,7 +374,7 @@ rm -f "${KUBECONFIG_DIR}/config-${INSTANCE_NAME}.bak"
 echo -e "${GREEN}Kubeconfig saved to: ${KUBECONFIG_DIR}/config-${INSTANCE_NAME}${NC}"
 
 # =============================================================================
-# Step 7: Setup SSH tunnel
+# Step 9: Setup SSH tunnel
 # =============================================================================
 
 echo ""
@@ -269,7 +390,7 @@ else
 fi
 
 # =============================================================================
-# Step 8: Verify cluster access
+# Step 10: Verify cluster access
 # =============================================================================
 
 echo ""
@@ -305,7 +426,7 @@ echo -e "${GREEN}GPU availability:${NC}"
 kubectl describe nodes | grep -A 5 "nvidia.com/gpu" || echo "  GPU resources not yet visible (may take a minute)"
 
 # =============================================================================
-# Step 9: Save configuration
+# Step 11: Save configuration
 # =============================================================================
 
 echo ""

@@ -2,18 +2,19 @@
 
 **Status**: In Progress
 **Created**: 2026-01-21
+**Updated**: 2026-01-21
 **Branch**: `main`
 **Spec**: [spec.md](spec.md)
 
 ## Summary
 
-Deploy a complete GPU-accelerated data platform on NVIDIA Brev, including K3S cluster, ArgoCD GitOps, Dagster pipelines, LakeFS/MinIO storage, Marimo notebooks, and NVIDIA AI Enterprise services (NIM LLM + Safe Synthesizer).
+Deploy a complete GPU-accelerated data platform on NVIDIA Brev, including RKE2 Kubernetes cluster, KAI Scheduler for GPU workloads, ArgoCD GitOps, Dagster pipelines, LakeFS/MinIO storage, observability stack, Marimo notebooks, and NVIDIA AI Enterprise services (NIM LLM + Safe Synthesizer).
 
 ## Critical Invariants to Respect
 
 Reference invariants from `docs/invariants/INVARIANTS.md`:
 
-- **INV-I004**: Cloud-init for K3S bootstrap - K3S must be installed via cloud-init, not manual SSH
+- **INV-I004**: Cloud-init for RKE2 bootstrap - RKE2 must be installed via cloud-init or bootstrap script
 - **INV-K001**: Namespace per application - Each service gets its own namespace
 - **INV-K002**: Resource limits on all pods - No unbounded resource consumption
 - **INV-K003**: GPU resources explicitly requested - NIM/Safe Synth must request `nvidia.com/gpu`
@@ -27,11 +28,15 @@ Reference invariants from `docs/invariants/INVARIANTS.md`:
 **New invariants introduced** (to be added to INVARIANTS.md after implementation):
 
 - **NEW INV-I005**: Brev instance naming convention - Instance must be named `brev-data-platform-dev`
-- **NEW INV-K006**: Sync wave ordering - Bootstrap (0) → Storage (1) → Platform (2) → AI (3)
+- **NEW INV-K006**: Sync wave ordering - Bootstrap/KAI (0) → Storage/Observability (1) → Platform (2) → AI (3)
+- **NEW INV-K007**: KAI Scheduler for GPU workloads - All GPU pods must use `schedulerName: kai-scheduler`
+- **NEW INV-K008**: RKE2 as Kubernetes distribution - Required for Run:AI compatibility
+- **NEW INV-O001**: GPU metrics via DCGM Exporter - All GPU workloads must be observable
+- **NEW INV-O002**: Centralized logging - All pod logs aggregated to Loki
 
 ## Current State Analysis
 
-The repository has foundational structure but no implementation:
+The repository has foundational structure with implementation in progress:
 
 ```
 brev-data-platform/
@@ -42,16 +47,19 @@ brev-data-platform/
 ├── docs/
 │   ├── plans/                  ✓ Planning protocol
 │   └── invariants/             ✓ Invariants documented
-├── terraform/                  ✗ Not created
-├── k8s/                        ✗ Not created
-├── dagster/                    ✗ Not created
-├── marimo/                     ✗ Not created
-├── config/                     ✗ Not created
-├── scripts/                    ✗ Not created
+├── k8s/
+│   ├── bootstrap/argocd/       ✓ ArgoCD setup
+│   └── apps/                   ✓ Helm charts created
+├── dagster/                    ✓ Scaffold created
+├── marimo/                     ✓ Directory created
+├── scripts/
+│   ├── bootstrap-rke2.sh       ✓ RKE2 bootstrap
+│   ├── cloud-init/rke2-gpu.yaml ✓ Cloud-init script
+│   └── setup-kubeconfig.sh     ✓ Kubeconfig fetch
 ├── .github/workflows/          ✗ Not created
-├── .sops.yaml                  ✗ Not created
-├── .env.example                ✗ Not created
-└── Makefile                    ✗ Not created
+├── .sops.yaml                  ✓ Created
+├── .env.example                ✓ Created
+└── Makefile                    ✓ Created
 ```
 
 ## Solution Design
@@ -65,28 +73,35 @@ Phase 1: Repository Structure
          ↓
 Phase 2: Secrets & Encryption Setup
          ↓
-Phase 3: Brev Instance Creation + K3S
+Phase 3: Brev Instance Creation + RKE2
          ↓
-Phase 4: ArgoCD Bootstrap
+Phase 4: KAI Scheduler (GPU Scheduling)
          ↓
-Phase 5: Storage Layer (MinIO + LakeFS)
+Phase 5: ArgoCD Bootstrap
          ↓
-Phase 6: Data Platform (Dagster + Marimo)
+Phase 6: Storage Layer (MinIO + LakeFS)
          ↓
-Phase 7: NVIDIA AI Enterprise
+Phase 7: Observability Stack (Prometheus, Grafana, Loki, DCGM)
          ↓
-Phase 8: CI/CD Workflows
+Phase 8: Data Platform (Dagster + Marimo)
          ↓
-Phase 9: Sample Pipeline & Validation
+Phase 9: NVIDIA AI Enterprise (with KAI Scheduling)
+         ↓
+Phase 10: CI/CD Workflows
+         ↓
+Phase 11: Sample Pipeline & Validation
 ```
 
 ### Key Design Decisions
 
 1. **Brev CLI over Terraform**: Simpler setup, already authenticated, faster iteration
-2. **Cloud-init for K3S**: Reproducible, automated installation on instance creation
-3. **Port-forward for access**: No ingress complexity, secure by default
-4. **App-of-apps pattern**: Single ArgoCD Application manages all services
-5. **Sync waves**: Ensures dependencies deploy in correct order
+2. **RKE2 over K3S**: Run:AI compatible, FIPS compliant, enterprise-ready
+3. **KAI Scheduler**: Open-source GPU scheduler for fractional GPUs, gang scheduling
+4. **Cloud-init for RKE2**: Reproducible, automated installation on instance creation
+5. **Port-forward for access**: No ingress complexity, secure by default
+6. **App-of-apps pattern**: Single ArgoCD Application manages all services
+7. **Sync waves**: Ensures dependencies deploy in correct order (KAI first)
+8. **PLG Stack (Prometheus/Loki/Grafana)**: Standard observability stack with DCGM for GPU metrics
 
 ## Phase Overview
 
@@ -95,13 +110,15 @@ Phase 9: Sample Pipeline & Validation
 | 0 | Prerequisites & Manual Setup | Setup | Accounts, API keys, local tools | Yes - many |
 | 1 | Repository Structure | Infrastructure | Directory scaffold, Makefile | No |
 | 2 | Secrets & Encryption Setup | Security | SOPS config, Age keys, .env files | Yes - key generation |
-| 3 | Brev Instance + K3S | Infrastructure | Running K3S cluster with GPU | Yes - instance creation |
-| 4 | ArgoCD Bootstrap | Kubernetes | ArgoCD deployed and configured | No |
-| 5 | Storage Layer | Kubernetes | MinIO + LakeFS running | No |
-| 6 | Data Platform | Application | Dagster + Marimo running | No |
-| 7 | NVIDIA AI Enterprise | Application | NIM + Safe Synthesizer running | No |
-| 8 | CI/CD Workflows | Integration | GitHub Actions configured | Yes - GitHub secrets |
-| 9 | Sample Pipeline | Validation | End-to-end demo working | No |
+| 3 | Brev Instance + RKE2 | Infrastructure | Running RKE2 cluster with GPU | Yes - instance creation |
+| 4 | KAI Scheduler | Kubernetes | GPU scheduling enabled | No |
+| 5 | ArgoCD Bootstrap | Kubernetes | ArgoCD deployed and configured | No |
+| 6 | Storage Layer | Kubernetes | MinIO + LakeFS running | No |
+| 7 | Observability Stack | Monitoring | Prometheus, Grafana, Loki, DCGM Exporter | No |
+| 8 | Data Platform | Application | Dagster + Marimo running | No |
+| 9 | NVIDIA AI Enterprise | Application | NIM + Safe Synthesizer (KAI scheduled) | No |
+| 10 | CI/CD Workflows | Integration | GitHub Actions configured | Yes - GitHub secrets |
+| 11 | Sample Pipeline | Validation | End-to-end demo working | No |
 
 ---
 
@@ -134,9 +151,8 @@ brev login
 #### 3. Verify NVIDIA AI Enterprise Access
 
 1. In NGC, go to **Catalog** → **Models**
-2. Search for "llama3-8b-instruct"
+2. Search for "gpt-oss" or available NIM models
 3. Verify you have access (may require AI Enterprise license)
-4. Note the model path: `meta/llama3-8b-instruct`
 
 #### 4. Create GitHub Repository (if not exists)
 
@@ -203,10 +219,12 @@ age --version
 
 | File/Directory | Purpose |
 |----------------|---------|
-| `scripts/cloud-init/k3s-gpu.yaml` | K3S + GPU bootstrap script |
+| `scripts/cloud-init/rke2-gpu.yaml` | RKE2 + GPU bootstrap script |
+| `scripts/bootstrap-rke2.sh` | Manual RKE2 bootstrap |
 | `scripts/setup-kubeconfig.sh` | Fetch kubeconfig from Brev |
 | `k8s/bootstrap/` | ArgoCD initial setup |
 | `k8s/apps/` | Application Helm charts |
+| `k8s/apps/kai-scheduler/` | KAI Scheduler chart |
 | `dagster/` | Pipeline code scaffold |
 | `marimo/` | Notebooks directory |
 | `config/` | Service configurations |
@@ -296,9 +314,9 @@ sops -d k8s/apps/minio/secrets.enc.yaml
 
 ---
 
-## Phase 3: Brev Instance + K3S
+## Phase 3: Brev Instance + RKE2
 
-**Goal**: Create GPU instance and bootstrap K3S cluster
+**Goal**: Create GPU instance and bootstrap RKE2 cluster
 **Type**: Infrastructure
 **Detailed Plan**: [phases/phase-3.md](phases/phase-3.md)
 
@@ -307,29 +325,32 @@ sops -d k8s/apps/minio/secrets.enc.yaml
 #### 1. Create Brev Instance
 
 ```bash
-# Create GPU instance (A100-40GB recommended)
-brev create brev-data-platform-dev -g "a2-highgpu-1g:nvidia-a100-40gb:1"
+# Create GPU instance (H200 recommended)
+make create-instance
+# Or: brev create brev-data-platform-dev -g "gpu-h200-sxm.1gpu-16vcpu-200gb"
 
 # Wait for instance to be ready
 brev ls
 ```
 
-#### 2. SSH into Instance and Run Cloud-Init
+#### 2. Bootstrap RKE2
 
 ```bash
-# Open shell to instance
-brev shell brev-data-platform-dev
+# Run bootstrap script
+make bootstrap-rke2
 
-# On the instance, run cloud-init script
-# (Or configure cloud-init in Brev if supported)
+# Or manually:
+brev shell brev-data-platform-dev
+sudo /tmp/bootstrap-rke2.sh
 ```
 
 ### Deliverables
 
-1. `scripts/cloud-init/k3s-gpu.yaml` - K3S bootstrap script
-2. Running Brev instance with K3S
-3. `nvidia-smi` working inside K3S pods
-4. Kubeconfig retrieved to local machine
+1. `scripts/bootstrap-rke2.sh` - RKE2 bootstrap script
+2. `scripts/cloud-init/rke2-gpu.yaml` - Cloud-init alternative
+3. Running Brev instance with RKE2
+4. `nvidia-smi` working inside RKE2 pods
+5. Kubeconfig retrieved to local machine
 
 ### Validation Approach
 
@@ -337,12 +358,15 @@ brev shell brev-data-platform-dev
 # Verify instance running
 brev ls
 
-# SSH and check K3S
+# SSH and check RKE2
 brev shell brev-data-platform-dev
 kubectl get nodes
 nvidia-smi
 
 # From local machine (after kubeconfig setup)
+make kubeconfig
+make ssh-tunnel-bg
+export KUBECONFIG=$PWD/kubeconfig.yaml
 kubectl get nodes
 kubectl get pods -n kube-system
 ```
@@ -350,18 +374,48 @@ kubectl get pods -n kube-system
 ### Success Criteria
 
 - [ ] `brev ls` shows instance running
-- [ ] K3S node is Ready
+- [ ] RKE2 node is Ready
 - [ ] `nvidia-smi` shows GPU inside instance
 - [ ] NVIDIA device plugin pods running
-- [ ] Local kubectl can connect via kubeconfig
+- [ ] Local kubectl can connect via SSH tunnel
 
 ---
 
-## Phase 4: ArgoCD Bootstrap
+## Phase 4: KAI Scheduler
+
+**Goal**: Deploy KAI Scheduler for advanced GPU workload scheduling
+**Type**: Kubernetes
+**Detailed Plan**: [phases/phase-4.md](phases/phase-4.md)
+
+### Deliverables
+
+1. `k8s/apps/kai-scheduler/` - KAI Scheduler Helm chart
+2. KAI Scheduler running in `kube-system` namespace
+3. GPU workloads can use `schedulerName: kai-scheduler`
+
+### Validation Approach
+
+```bash
+# Check KAI Scheduler pods
+kubectl get pods -n kube-system -l app=kai-scheduler
+
+# Verify scheduler is working
+kubectl get events --field-selector reason=Scheduled | grep kai-scheduler
+```
+
+### Success Criteria
+
+- [ ] KAI Scheduler pod running
+- [ ] Scheduler registered with API server
+- [ ] Can schedule test GPU pod with `schedulerName: kai-scheduler`
+
+---
+
+## Phase 5: ArgoCD Bootstrap
 
 **Goal**: Deploy ArgoCD and configure GitOps
 **Type**: Kubernetes
-**Detailed Plan**: [phases/phase-4.md](phases/phase-4.md)
+**Detailed Plan**: [phases/phase-5.md](phases/phase-5.md)
 
 ### Deliverables
 
@@ -374,10 +428,10 @@ kubectl get pods -n kube-system
 
 ```bash
 # Port forward ArgoCD
-kubectl port-forward svc/argocd-server -n argocd 8080:443
+make port-forward-argocd
 
 # Get admin password
-kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
+make argocd-password
 
 # Access UI at https://localhost:8080
 ```
@@ -392,11 +446,11 @@ kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.pas
 
 ---
 
-## Phase 5: Storage Layer (MinIO + LakeFS)
+## Phase 6: Storage Layer (MinIO + LakeFS)
 
 **Goal**: Deploy MinIO object storage and LakeFS versioning
 **Type**: Kubernetes
-**Detailed Plan**: [phases/phase-5.md](phases/phase-5.md)
+**Detailed Plan**: [phases/phase-6.md](phases/phase-6.md)
 
 ### Deliverables
 
@@ -409,10 +463,10 @@ kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.pas
 
 ```bash
 # Port forward MinIO console
-kubectl port-forward svc/minio-console -n minio 9001:9001
+make port-forward-minio
 
 # Port forward LakeFS
-kubectl port-forward svc/lakefs -n lakefs 8000:8000
+make port-forward-lakefs
 
 # Verify via UI or CLI
 ```
@@ -428,11 +482,51 @@ kubectl port-forward svc/lakefs -n lakefs 8000:8000
 
 ---
 
-## Phase 6: Data Platform (Dagster + Marimo)
+## Phase 7: Observability Stack
+
+**Goal**: Deploy monitoring and logging stack for GPU and application observability
+**Type**: Monitoring
+**Detailed Plan**: [phases/phase-7.md](phases/phase-7.md)
+
+### Deliverables
+
+1. `k8s/apps/monitoring/` - Observability Helm chart with:
+   - Prometheus for metrics collection
+   - Grafana for visualization
+   - Loki for log aggregation
+   - Promtail for log shipping
+   - DCGM Exporter for GPU metrics
+2. Pre-configured GPU dashboard
+3. All services deployed in `monitoring` namespace
+
+### Validation Approach
+
+```bash
+# Port forward Grafana
+make port-forward-grafana
+
+# Get Grafana password
+make grafana-password
+
+# Access at http://localhost:3001
+# Check GPU dashboard for H200 metrics
+```
+
+### Success Criteria
+
+- [ ] Prometheus running and scraping targets
+- [ ] DCGM Exporter collecting GPU metrics
+- [ ] Grafana accessible with pre-loaded dashboards
+- [ ] Loki receiving logs from all namespaces
+- [ ] GPU utilization visible in Grafana
+
+---
+
+## Phase 8: Data Platform (Dagster + Marimo)
 
 **Goal**: Deploy Dagster pipeline orchestration and Marimo notebooks
 **Type**: Application
-**Detailed Plan**: [phases/phase-6.md](phases/phase-6.md)
+**Detailed Plan**: [phases/phase-8.md](phases/phase-8.md)
 
 ### Deliverables
 
@@ -445,10 +539,10 @@ kubectl port-forward svc/lakefs -n lakefs 8000:8000
 
 ```bash
 # Port forward Dagster
-kubectl port-forward svc/dagster-webserver -n dagster 3000:3000
+make port-forward-dagster
 
 # Port forward Marimo
-kubectl port-forward svc/marimo -n marimo 2718:2718
+make port-forward-marimo
 ```
 
 ### Success Criteria
@@ -461,11 +555,11 @@ kubectl port-forward svc/marimo -n marimo 2718:2718
 
 ---
 
-## Phase 7: NVIDIA AI Enterprise
+## Phase 9: NVIDIA AI Enterprise
 
-**Goal**: Deploy NIM LLM and Safe Synthesizer
+**Goal**: Deploy NIM LLM and Safe Synthesizer with KAI Scheduling
 **Type**: Application
-**Detailed Plan**: [phases/phase-7.md](phases/phase-7.md)
+**Detailed Plan**: [phases/phase-9.md](phases/phase-9.md)
 
 ### Manual Steps Required
 
@@ -478,39 +572,44 @@ sops -d k8s/apps/nvidia-ai/secrets.enc.yaml | grep NGC_API_KEY
 
 ### Deliverables
 
-1. `k8s/apps/nvidia-nim/` - NIM LLM Helm chart
-2. `k8s/apps/nvidia-safe-synth/` - Safe Synthesizer Helm chart
+1. `k8s/apps/nvidia-nim/` - NIM LLM Helm chart (with KAI scheduler)
+2. `k8s/apps/nvidia-safe-synth/` - Safe Synthesizer Helm chart (with KAI scheduler)
 3. `config/nim/` - Model configuration
 4. `config/safe-synthesizer/` - Synth configuration
-5. Both services running and accessible
+5. Both services running and scheduled via KAI
 
 ### Validation Approach
 
 ```bash
 # Port forward NIM
-kubectl port-forward svc/nim-llm -n nvidia-ai 8000:8000
+make port-forward-nim
 
 # Test inference
-curl -X POST http://localhost:8000/v1/completions \
+curl -X POST http://localhost:8001/v1/completions \
   -H "Content-Type: application/json" \
-  -d '{"model": "meta/llama3-8b-instruct", "prompt": "Hello", "max_tokens": 50}'
+  -d '{"model": "gpt-oss-120b", "prompt": "Hello", "max_tokens": 50}'
+
+# Verify KAI scheduling
+kubectl get pods -n nvidia-ai -o jsonpath='{.items[*].spec.schedulerName}'
 ```
 
 ### Success Criteria
 
 - [ ] NIM pod running (may take time to download model)
+- [ ] NIM scheduled by KAI Scheduler
 - [ ] NIM using GPU (`nvidia-smi` shows process)
 - [ ] NIM responds to inference requests
 - [ ] Safe Synthesizer pod running
+- [ ] Safe Synthesizer scheduled by KAI Scheduler
 - [ ] Safe Synthesizer can process requests
 
 ---
 
-## Phase 8: CI/CD Workflows
+## Phase 10: CI/CD Workflows
 
 **Goal**: Configure GitHub Actions for automation
 **Type**: Integration
-**Detailed Plan**: [phases/phase-8.md](phases/phase-8.md)
+**Detailed Plan**: [phases/phase-10.md](phases/phase-10.md)
 
 ### Manual Steps Required
 
@@ -554,11 +653,11 @@ git push -u origin test/ci
 
 ---
 
-## Phase 9: Sample Pipeline & Validation
+## Phase 11: Sample Pipeline & Validation
 
 **Goal**: Create end-to-end demo pipeline and validate full stack
 **Type**: Validation
-**Detailed Plan**: [phases/phase-9.md](phases/phase-9.md)
+**Detailed Plan**: [phases/phase-11.md](phases/phase-11.md)
 
 ### Deliverables
 
@@ -594,7 +693,7 @@ git push -u origin test/ci
 ### Infrastructure Validation
 
 - Brev instance running: `brev ls`
-- K3S healthy: `kubectl get nodes`
+- RKE2 healthy: `kubectl get nodes`
 - GPU available: `kubectl describe node | grep nvidia`
 
 ### Kubernetes Validation
@@ -602,6 +701,14 @@ git push -u origin test/ci
 - All pods running: `kubectl get pods -A`
 - No CrashLoopBackOff
 - Resource limits respected: `kubectl top pods -A`
+- KAI Scheduler working: `kubectl get events | grep kai-scheduler`
+
+### Observability Validation
+
+- Prometheus: Scraping targets, including DCGM
+- Grafana: Dashboards loaded, GPU metrics visible
+- Loki: Receiving logs from all namespaces
+- DCGM Exporter: GPU metrics available
 
 ### Application Validation
 
@@ -615,6 +722,7 @@ git push -u origin test/ci
 - ArgoCD: All apps synced
 - GitOps: Push triggers sync
 - CI/CD: Workflows execute
+- KAI: GPU pods scheduled correctly
 
 ---
 
@@ -622,7 +730,7 @@ git push -u origin test/ci
 
 After implementation is complete:
 
-- [ ] `docs/invariants/INVARIANTS.md` - Add INV-I005, INV-K006
+- [ ] `docs/invariants/INVARIANTS.md` - Add INV-I005, INV-K006, INV-K007, INV-K008
 - [ ] `README.md` - Quick start guide
 - [ ] `.CLAUDE.md` - Update if conventions changed
 
@@ -632,13 +740,15 @@ After implementation is complete:
 
 | Phase | Status | Started | Completed | Notes |
 |-------|--------|---------|-----------|-------|
-| Phase 0 | Pending | | | Manual setup |
-| Phase 1 | Pending | | | Repository structure |
-| Phase 2 | Pending | | | Secrets setup |
-| Phase 3 | Pending | | | Brev + K3S |
-| Phase 4 | Pending | | | ArgoCD |
-| Phase 5 | Pending | | | MinIO + LakeFS |
-| Phase 6 | Pending | | | Dagster + Marimo |
-| Phase 7 | Pending | | | NVIDIA AI |
-| Phase 8 | Pending | | | CI/CD |
-| Phase 9 | Pending | | | Validation |
+| Phase 0 | Complete | 2026-01-21 | 2026-01-21 | Manual setup |
+| Phase 1 | Complete | 2026-01-21 | 2026-01-21 | Repository structure |
+| Phase 2 | Complete | 2026-01-21 | 2026-01-21 | Secrets setup |
+| Phase 3 | Complete | 2026-01-21 | 2026-01-21 | Brev + RKE2 |
+| Phase 4 | Complete | 2026-01-21 | 2026-01-21 | KAI Scheduler v0.12.9 |
+| Phase 5 | Complete | 2026-01-21 | 2026-01-21 | ArgoCD with app-of-apps |
+| Phase 6 | Complete | 2026-01-21 | 2026-01-22 | MinIO + LakeFS with persistence |
+| Phase 7 | In Progress | 2026-01-22 | | Monitoring stack deploying |
+| Phase 8 | Pending | | | Dagster + Marimo |
+| Phase 9 | Pending | | | NVIDIA AI (with KAI) |
+| Phase 10 | Pending | | | CI/CD |
+| Phase 11 | Pending | | | Validation |

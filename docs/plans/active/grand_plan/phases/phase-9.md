@@ -1,4 +1,4 @@
-# Phase 7: NVIDIA AI Enterprise
+# Phase 9: NVIDIA AI Enterprise
 
 **Status**: Pending
 **Started**:
@@ -8,26 +8,28 @@
 
 ## Objective
 
-Deploy NVIDIA NIM LLM for inference and NVIDIA Safe Synthesizer for synthetic data generation. Both services will be accessible from Dagster pipelines and Marimo notebooks.
+Deploy NVIDIA NIM LLM for inference and NVIDIA Safe Synthesizer for synthetic data generation. Both services will be accessible from Dagster pipelines and Marimo notebooks. All GPU workloads are scheduled via KAI Scheduler for optimal resource utilization.
 
 ---
 
 ## Invariants Enforced in This Phase
 
 - **INV-K003**: GPU resources explicitly requested - Both services must request `nvidia.com/gpu`
+- **INV-K007**: KAI Scheduler for GPU workloads - All GPU pods use `schedulerName: kai-scheduler`
 - **INV-N001**: NIM requires GPU node - Node selector for GPU
 - **INV-N002**: Model configuration in ConfigMap - NIM model settings externalized
 - **INV-N003**: Safe Synthesizer output to LakeFS - Synthetic data versioned
 - **INV-S003**: NGC API key as Kubernetes secret - SOPS encrypted
-- **NEW INV-K006**: Sync wave ordering - AI (wave 3) after Platform (wave 2)
+- **INV-K006**: Sync wave ordering - AI (wave 3) after Platform (wave 2)
 
 ---
 
 ## Prerequisites
 
 1. NGC API Key in encrypted secrets (from Phase 2)
-2. GPU available on node (verified in Phase 3)
-3. NVIDIA AI Enterprise license (for production models)
+2. RKE2 cluster with GPU support (verified in Phase 3)
+3. KAI Scheduler deployed and running (Phase 3.5)
+4. NVIDIA AI Enterprise license (for production models)
 
 ---
 
@@ -72,6 +74,9 @@ resources:
     cpu: 8000m
     memory: 32Gi
     nvidia.com/gpu: 1
+
+# KAI Scheduler for GPU workloads
+schedulerName: kai-scheduler
 
 # Node selection for GPU
 nodeSelector:
@@ -159,6 +164,8 @@ spec:
       labels:
         app: nim-llm
     spec:
+      # KAI Scheduler for GPU workloads
+      schedulerName: {{ .Values.schedulerName | default "kai-scheduler" }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -246,6 +253,9 @@ imagePullSecrets:
 
 replicaCount: 1
 
+# KAI Scheduler for GPU workloads
+schedulerName: kai-scheduler
+
 # GPU resources
 resources:
   requests:
@@ -325,6 +335,8 @@ spec:
       labels:
         app: safe-synthesizer
     spec:
+      # KAI Scheduler for GPU workloads
+      schedulerName: {{ .Values.schedulerName | default "kai-scheduler" }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -596,6 +608,10 @@ class NIMResource(ConfigurableResource):
 # Check all NVIDIA AI pods running
 kubectl get pods -n nvidia-ai
 
+# Verify KAI Scheduler is used for GPU pods
+kubectl get pods -n nvidia-ai -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.schedulerName}{"\n"}{end}'
+# Expected: all GPU pods should show "kai-scheduler"
+
 # Check GPU allocation
 kubectl describe node | grep -A 10 "Allocated resources"
 
@@ -644,6 +660,7 @@ kubectl run test-nim --rm -it --restart=Never \
 - [ ] Safe Synthesizer pod running
 - [ ] Safe Synthesizer health endpoint responds
 - [ ] GPU utilization visible in `nvidia-smi`
+- [ ] Both pods using KAI Scheduler (`schedulerName: kai-scheduler`)
 - [ ] NIM resource added to Dagster
 - [ ] Both applications show Synced in ArgoCD
 
@@ -651,4 +668,4 @@ kubectl run test-nim --rm -it --restart=Never \
 
 ## Next Phase
 
-Once NVIDIA AI services are running, proceed to [Phase 8: CI/CD Workflows](phase-8.md).
+Once NVIDIA AI services are running, proceed to [Phase 10: CI/CD Workflows](phase-10.md).
