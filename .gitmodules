@@ -1,3 +1,6 @@
 [submodule "docker/jupyterhub-singleuser"]
 	path = docker/jupyterhub-singleuser
 	url = https://github.com/aerugo/jupyterhub-singleuser.git
+[submodule "dagster"]
+	path = dagster
+	url = https://github.com/aerugo/brev-dagster-pipelines.git
