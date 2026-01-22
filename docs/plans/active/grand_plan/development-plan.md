@@ -83,11 +83,13 @@ Phase 6: Storage Layer (MinIO + LakeFS)
          ↓
 Phase 7: Observability Stack (Prometheus, Grafana, Loki, DCGM)
          ↓
-Phase 8: Data Platform (Dagster + Marimo)
+Phase 8: Data Platform (Dagster + JupyterHub)
          ↓
 Phase 9: NVIDIA AI Enterprise (with KAI Scheduling)
          ↓
 Phase 10: CI/CD Workflows
+         ↓
+Phase 10.1: Dagster Pipelines Repository
          ↓
 Phase 11: Sample Pipeline & Validation
 ```
@@ -115,9 +117,10 @@ Phase 11: Sample Pipeline & Validation
 | 5 | ArgoCD Bootstrap | Kubernetes | ArgoCD deployed and configured | No |
 | 6 | Storage Layer | Kubernetes | MinIO + LakeFS running | No |
 | 7 | Observability Stack | Monitoring | Prometheus, Grafana, Loki, DCGM Exporter | No |
-| 8 | Data Platform | Application | Dagster + Marimo running | No |
+| 8 | Data Platform | Application | Dagster + JupyterHub/Marimo running | No |
 | 9 | NVIDIA AI Enterprise | Application | NIM + Safe Synthesizer (KAI scheduled) | No |
 | 10 | CI/CD Workflows | Integration | GitHub Actions configured | Yes - GitHub secrets |
+| 10.1 | Dagster Pipelines Repository | Application | Separate repo, custom Docker image | Yes - create repo |
 | 11 | Sample Pipeline | Validation | End-to-end demo working | No |
 
 ---
@@ -522,7 +525,7 @@ make grafana-password
 
 ---
 
-## Phase 8: Data Platform (Dagster + Marimo)
+## Phase 8: Data Platform (Dagster + JupyterHub)
 
 **Goal**: Deploy Dagster pipeline orchestration and Marimo notebooks
 **Type**: Application
@@ -751,4 +754,5 @@ After implementation is complete:
 | Phase 8 | Complete | 2026-01-22 | 2026-01-22 | Dagster + JupyterHub/Marimo |
 | Phase 9 | Complete | 2026-01-22 | 2026-01-22 | NVIDIA NIM Llama 3.1 8B |
 | Phase 10 | Complete | 2026-01-22 | 2026-01-22 | GitHub Actions CI/CD |
+| Phase 10.1 | Pending | | | Dagster Pipelines Repository |
 | Phase 11 | Pending | | | Validation |
