@@ -29,8 +29,8 @@ imagePullSecrets:
 replicaCount: 1
 
 # GPU resources - using KAI Scheduler fractional GPU allocation
-# Llama 3.1 8B needs ~20GB VRAM, allocating 40GB for headroom
-# This allows sharing the A100 80GB with other workloads (e.g., JupyterHub GPU notebooks)
+# Llama 3.1 8B needs ~20GB VRAM, allocating 70GB for headroom (H200 141GB)
+# This allows sharing with JupyterHub GPU notebooks (70GB each = 140GB total)
 # Note: nvidia.com/gpu: 1 is still required for device mounting; KAI annotation controls memory allocation
 resources:
   requests:
@@ -50,9 +50,9 @@ runtimeClassName: nvidia
 schedulerName: kai-scheduler
 
 # KAI Scheduler annotations for fractional GPU allocation
-# Requests 40GB of GPU memory instead of a whole GPU
+# Requests 70GB of GPU memory (H200 141GB: 70GB NIM + 70GB JupyterHub = 140GB)
 podAnnotations:
-  kai.scheduler.nvidia.com/gpu-memory: "40Gi"
+  kai.scheduler.nvidia.com/gpu-memory: "70Gi"
 
 # Tolerations for GPU nodes
 tolerations:

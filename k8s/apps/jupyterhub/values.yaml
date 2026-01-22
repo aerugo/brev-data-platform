@@ -148,8 +148,8 @@ jupyterhub:
         description: "2 CPU cores, 4GB RAM - for data analysis and light workloads"
         default: true
 
-      - display_name: "GPU Server (40GB VRAM)"
-        description: "2 CPU cores, 8GB RAM, 40GB GPU VRAM - for ML/AI workloads (shared via KAI Scheduler)"
+      - display_name: "GPU Server (70GB VRAM)"
+        description: "2 CPU cores, 8GB RAM, 70GB GPU VRAM - for ML/AI workloads (shared via KAI Scheduler)"
         kubespawner_override:
           mem_guarantee: 4G
           mem_limit: 8G
@@ -158,10 +158,10 @@ jupyterhub:
             nvidia.com/gpu: "1"
           extra_resource_guarantees:
             nvidia.com/gpu: "1"
-          # KAI Scheduler annotation controls memory allocation (40GB of 80GB)
-          # This allows sharing the A100 80GB with NIM LLM
+          # KAI Scheduler annotation controls memory allocation (70GB of 141GB)
+          # This allows sharing the H200 141GB with NIM LLM (70GB each)
           extra_annotations:
-            kai.scheduler.nvidia.com/gpu-memory: "40Gi"
+            kai.scheduler.nvidia.com/gpu-memory: "70Gi"
 
   # ==========================================================================
   # Scheduling - Disable default user-scheduler (use KAI instead)
