@@ -1,0 +1,18 @@
+[project]
+name = "central-bank-speeches-dashboard"
+version = "0.1.0"
+description = "Interactive Marimo dashboard for central bank speeches exploration"
+requires-python = ">=3.10"
+dependencies = [
+    "marimo>=0.9.0",
+    "polars>=1.0.0",
+    "weaviate-client>=4.9.0",
+    "requests>=2.31.0",
+    "lakefs-sdk>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+]
