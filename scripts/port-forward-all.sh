@@ -26,7 +26,7 @@ KUBECONFIG_FILE="$HOME/.kube/config-${INSTANCE_NAME}"
 SERVICES=(
     "ArgoCD:argocd:argocd-server:8080:80:http"
     "JupyterHub:jupyterhub:proxy-public:8000:80:http"
-    "Dagster:dagster:dagster-webserver:3000:3000:http"
+    "Dagster:dagster:dagster-dagster-webserver:3000:80:http"
     "LakeFS:lakefs:lakefs:8001:8000:http"
     "MinIO:minio:minio-console:9001:9001:http"
     "NIM-LLM:nvidia-ai:nim-llm:8002:8000:http"
