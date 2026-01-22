@@ -215,20 +215,21 @@ All services are accessed via kubectl port-forward through SSH tunnel:
 # Terminal 1: Keep SSH tunnel running
 make ssh-tunnel
 
-# Terminal 2: Port forward to service
+# Terminal 2: Port forward all services (recommended)
 export KUBECONFIG=~/.kube/config-brev-data-platform-dev
-make port-forward-argocd
+make port-forward-all
 ```
 
-| Service | Command | Local URL | Credentials |
-|---------|---------|-----------|-------------|
-| ArgoCD | `make port-forward-argocd` | https://localhost:8080 | admin / `make argocd-password` |
-| MinIO | `make port-forward-minio` | http://localhost:9001 | See `.env.local` |
-| LakeFS | `make port-forward-lakefs` | http://localhost:8000 | See `.env.local` |
-| Dagster | `make port-forward-dagster` | http://localhost:3000 | N/A |
-| JupyterHub | `make port-forward-jupyterhub` | http://localhost:8000 | Any username/password |
-| Grafana | `make port-forward-grafana` | http://localhost:3001 | admin / `make grafana-password` |
-| Prometheus | `make port-forward-prometheus` | http://localhost:9090 | N/A |
+| Service | Local URL | Credentials |
+|---------|-----------|-------------|
+| ArgoCD | https://localhost:8080 | admin / `make argocd-password` |
+| JupyterHub | http://localhost:8000 | Any username / any password |
+| Dagster | http://localhost:3000 | N/A |
+| LakeFS | http://localhost:8001 | See `.env.local` |
+| MinIO | http://localhost:9001 | See `.env.local` |
+| NIM LLM | http://localhost:8002 | N/A (API endpoint) |
+| Grafana | http://localhost:3001 | admin / `make grafana-password` |
+| Prometheus | http://localhost:9090 | N/A |
 
 ---
 
@@ -256,11 +257,13 @@ make apply-secrets           # Apply encrypted secrets to cluster
 make bootstrap-argocd        # Install ArgoCD
 
 # Port Forwarding
+make port-forward-all        # Forward all services (recommended)
 make port-forward-argocd     # https://localhost:8080
-make port-forward-dagster    # http://localhost:3000
-make port-forward-minio      # http://localhost:9001
-make port-forward-lakefs     # http://localhost:8000
 make port-forward-jupyterhub # http://localhost:8000
+make port-forward-dagster    # http://localhost:3000
+make port-forward-lakefs     # http://localhost:8001
+make port-forward-minio      # http://localhost:9001
+make port-forward-nim        # http://localhost:8002
 make port-forward-grafana    # http://localhost:3001
 
 # Secrets

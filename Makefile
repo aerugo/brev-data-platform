@@ -1,7 +1,7 @@
 # Brev Data Platform - Makefile
 .PHONY: help setup delete-instance start-instance stop-instance shell status \
         kubeconfig ssh-tunnel bootstrap-rke2 bootstrap-kai apply-secrets \
-        port-forward-argocd port-forward-minio port-forward-lakefs \
+        port-forward-all port-forward-argocd port-forward-minio port-forward-lakefs \
         port-forward-dagster port-forward-jupyterhub port-forward-nim \
         port-forward-grafana port-forward-prometheus port-forward-loki \
         encrypt decrypt edit-secret create-secrets lint validate \
@@ -99,6 +99,32 @@ apply-secrets: ## Apply encrypted secrets to cluster
 # Port Forwarding
 # =============================================================================
 
+port-forward-all: ## Forward all services (Ctrl+C to stop)
+	@echo "$(GREEN)Starting port forwards for all services...$(RESET)"
+	@echo ""
+	@echo "Services:"
+	@echo "  ArgoCD:      https://localhost:8080  (admin / make argocd-password)"
+	@echo "  JupyterHub:  http://localhost:8000   (any user / any password)"
+	@echo "  Dagster:     http://localhost:3000"
+	@echo "  LakeFS:      http://localhost:8001"
+	@echo "  MinIO:       http://localhost:9001"
+	@echo "  NIM API:     http://localhost:8002"
+	@echo "  Grafana:     http://localhost:3001   (admin / make grafana-password)"
+	@echo "  Prometheus:  http://localhost:9090"
+	@echo ""
+	@echo "Press Ctrl+C to stop all port forwards"
+	@echo ""
+	@trap 'kill $$(jobs -p) 2>/dev/null' EXIT; \
+	kubectl port-forward svc/argocd-server -n argocd 8080:443 2>/dev/null & \
+	kubectl port-forward svc/proxy-public -n jupyterhub 8000:80 2>/dev/null & \
+	kubectl port-forward svc/dagster-webserver -n dagster 3000:3000 2>/dev/null & \
+	kubectl port-forward svc/lakefs -n lakefs 8001:8000 2>/dev/null & \
+	kubectl port-forward svc/minio-console -n minio 9001:9001 2>/dev/null & \
+	kubectl port-forward svc/nim-llm -n nvidia-ai 8002:8000 2>/dev/null & \
+	kubectl port-forward svc/monitoring-grafana -n monitoring 3001:80 2>/dev/null & \
+	kubectl port-forward svc/monitoring-kube-prometheus-prometheus -n monitoring 9090:9090 2>/dev/null & \
+	wait
+
 port-forward-argocd: ## Forward ArgoCD UI to localhost:8080
 	@echo "ArgoCD UI: https://localhost:8080"
 	@echo "Username: admin"
@@ -109,9 +135,9 @@ port-forward-minio: ## Forward MinIO console to localhost:9001
 	@echo "MinIO Console: http://localhost:9001"
 	kubectl port-forward svc/minio-console -n minio 9001:9001
 
-port-forward-lakefs: ## Forward LakeFS UI to localhost:8000
-	@echo "LakeFS UI: http://localhost:8000"
-	kubectl port-forward svc/lakefs -n lakefs 8000:8000
+port-forward-lakefs: ## Forward LakeFS UI to localhost:8001
+	@echo "LakeFS UI: http://localhost:8001"
+	kubectl port-forward svc/lakefs -n lakefs 8001:8000
 
 port-forward-dagster: ## Forward Dagster UI to localhost:3000
 	@echo "Dagster UI: http://localhost:3000"
@@ -122,9 +148,9 @@ port-forward-jupyterhub: ## Forward JupyterHub to localhost:8000
 	@echo "Login with any username and any password (dummy auth)"
 	kubectl port-forward svc/proxy-public -n jupyterhub 8000:80
 
-port-forward-nim: ## Forward NIM LLM to localhost:8001
-	@echo "NIM LLM API: http://localhost:8001"
-	kubectl port-forward svc/nim-llm -n nvidia-ai 8001:8000
+port-forward-nim: ## Forward NIM LLM to localhost:8002
+	@echo "NIM LLM API: http://localhost:8002"
+	kubectl port-forward svc/nim-llm -n nvidia-ai 8002:8000
 
 port-forward-grafana: ## Forward Grafana to localhost:3001
 	@echo "Grafana UI: http://localhost:3001"
