@@ -48,6 +48,27 @@ dagster:
         imagePullPolicy: Always
         loadInclusterConfig: true
 
-  # User code deployments disabled for now
+  # User code deployments - enabled with default example
+  # Will be replaced with custom user code later
   dagster-user-deployments:
-    enabled: false
+    enabled: true
+    enableSubchart: true
+    deployments:
+      - name: "k8s-example-user-code-1"
+        image:
+          repository: "docker.io/dagster/user-code-example"
+          tag: "1.12.11"
+          pullPolicy: Always
+        dagsterApiGrpcArgs:
+          - "-m"
+          - "dagster_test.test_project.test_jobs.repo"
+          - "-a"
+          - "define_demo_execution_repo"
+        port: 3030
+        resources:
+          requests:
+            memory: 256Mi
+            cpu: 100m
+          limits:
+            memory: 512Mi
+            cpu: 500m
