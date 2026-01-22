@@ -3,9 +3,9 @@ name: dagster
 description: Dagster data pipeline orchestration for Brev Data Platform
 type: application
 version: 0.1.0
-appVersion: "1.6.0"
+appVersion: "1.12.11"
 
 dependencies:
   - name: dagster
-    version: "1.6.0"
+    version: "1.12.11"
     repository: "https://dagster-io.github.io/helm"

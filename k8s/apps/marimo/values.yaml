@@ -2,8 +2,8 @@
 # Custom chart for Marimo notebooks
 
 image:
-  repository: marimo-dev/marimo
-  tag: "0.9.0"
+  repository: ghcr.io/marimo-team/marimo
+  tag: "0.10.6"
   pullPolicy: IfNotPresent
 
 replicaCount: 1

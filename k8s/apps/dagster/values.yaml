@@ -2,13 +2,10 @@
 # Uses the official Dagster Helm chart as a dependency
 
 dagster:
-  # Global settings
-  global:
-    serviceAccountName: dagster
-
-  # PostgreSQL for Dagster storage (use embedded for simplicity)
+  # PostgreSQL for Dagster storage
   postgresql:
     enabled: true
+    postgresqlUsername: dagster
     postgresqlPassword: dagster
     postgresqlDatabase: dagster
 
@@ -24,9 +21,9 @@ dagster:
         cpu: 500m
     service:
       type: ClusterIP
-      port: 3000
+      port: 80
 
-  # Dagster daemon (schedules, sensors)
+  # Dagster daemon (schedules, sensors, run queue)
   dagsterDaemon:
     enabled: true
     resources:
@@ -36,15 +33,21 @@ dagster:
       limits:
         memory: 512Mi
         cpu: 500m
+    runCoordinator:
+      enabled: true
+      type: QueuedRunCoordinator
+      config:
+        queuedRunCoordinator:
+          maxConcurrentRuns: 10
 
   # Run launcher configuration
   runLauncher:
     type: K8sRunLauncher
     config:
       k8sRunLauncher:
-        envSecrets:
-          - name: dagster-env-secrets
+        imagePullPolicy: Always
+        loadInclusterConfig: true
 
-  # User code deployments (will be configured later)
-  dagsterUserDeployments:
+  # User code deployments disabled for now
+  dagster-user-deployments:
     enabled: false
