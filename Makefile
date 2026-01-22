@@ -1,6 +1,6 @@
 # Brev Data Platform - Makefile
 .PHONY: help setup delete-instance start-instance stop-instance shell status \
-        kubeconfig ssh-tunnel bootstrap-rke2 bootstrap-kai apply-secrets \
+        kubeconfig ssh-tunnel ssh-tunnel-bg bootstrap-rke2 bootstrap-kai apply-secrets \
         port-forward-all port-forward-argocd port-forward-minio port-forward-lakefs \
         port-forward-dagster port-forward-jupyterhub port-forward-nim \
         port-forward-grafana port-forward-prometheus port-forward-loki \
@@ -8,6 +8,7 @@
         validate-platform validate-quick validate-k8s \
         build-dagster dagster-dev dagster-test \
         bootstrap-argocd argocd-password grafana-password \
+        minio-credentials lakefs-credentials all-credentials \
         down destroy full-setup
 
 INSTANCE_NAME ?= brev-data-platform-dev
@@ -82,16 +83,94 @@ kubeconfig: ## Fetch kubeconfig from instance
 
 ssh-tunnel: ## Start SSH tunnel for kubectl access (runs in foreground)
 	@echo "$(GREEN)Starting SSH tunnel to RKE2 API...$(RESET)"
-	@echo "Keep this running in the background or use: make ssh-tunnel &"
-	@echo "Then in another terminal: export KUBECONFIG=$$PWD/kubeconfig.yaml"
+	@echo "Keep this running in the background or use: make ssh-tunnel-bg"
+	@echo ""
+	@echo "$(CYAN)══════════════════════════════════════════════════════════════$(RESET)"
+	@echo "$(CYAN)  BREV DATA PLATFORM - SERVICE ACCESS$(RESET)"
+	@echo "$(CYAN)══════════════════════════════════════════════════════════════$(RESET)"
+	@echo ""
+	@echo "Run $(YELLOW)make port-forward-all$(RESET) in another terminal to access services:"
+	@echo ""
+	@echo "$(GREEN)ArgoCD$(RESET)       https://localhost:8080"
+	@echo "             User: admin"
+	@echo "             Pass: $(YELLOW)make argocd-password$(RESET)"
+	@echo ""
+	@echo "$(GREEN)JupyterHub$(RESET)   http://localhost:8000"
+	@echo "             User: any username"
+	@echo "             Pass: any password (dummy auth)"
+	@echo ""
+	@echo "$(GREEN)Dagster$(RESET)      http://localhost:3000"
+	@echo "             No authentication required"
+	@echo ""
+	@echo "$(GREEN)LakeFS$(RESET)       http://localhost:8001"
+	@echo "             User: $(YELLOW)make lakefs-credentials$(RESET)"
+	@echo ""
+	@echo "$(GREEN)MinIO$(RESET)        http://localhost:9001"
+	@echo "             User: $(YELLOW)make minio-credentials$(RESET)"
+	@echo ""
+	@echo "$(GREEN)NIM LLM$(RESET)      http://localhost:8002"
+	@echo "             OpenAI-compatible API (no auth)"
+	@echo ""
+	@echo "$(GREEN)Grafana$(RESET)      http://localhost:3001"
+	@echo "             User: admin"
+	@echo "             Pass: $(YELLOW)make grafana-password$(RESET)"
+	@echo ""
+	@echo "$(GREEN)Prometheus$(RESET)   http://localhost:9090"
+	@echo "             No authentication required"
+	@echo ""
+	@echo "$(CYAN)══════════════════════════════════════════════════════════════$(RESET)"
+	@echo ""
 	ssh -F $(SSH_CONFIG) -N -L 6443:127.0.0.1:6443 $(INSTANCE_NAME)-host
 
-ssh-tunnel-bg: ## Start SSH tunnel in background
+ssh-tunnel-bg: ## Start SSH tunnel in background and show service info
 	@pkill -f 'ssh.*6443:127.0.0.1:6443' 2>/dev/null || true
 	@ssh -F $(SSH_CONFIG) -N -L 6443:127.0.0.1:6443 $(INSTANCE_NAME)-host &
 	@sleep 2
 	@echo "$(GREEN)SSH tunnel started in background$(RESET)"
 	@echo "To stop: pkill -f 'ssh.*6443:127.0.0.1:6443'"
+	@echo ""
+	@echo "$(CYAN)══════════════════════════════════════════════════════════════$(RESET)"
+	@echo "$(CYAN)  BREV DATA PLATFORM - SERVICE CREDENTIALS$(RESET)"
+	@echo "$(CYAN)══════════════════════════════════════════════════════════════$(RESET)"
+	@echo ""
+	@ARGOCD_PWD=$$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" 2>/dev/null | base64 -d 2>/dev/null || echo "N/A"); \
+	GRAFANA_PWD=$$(kubectl -n monitoring get secret monitoring-grafana -o jsonpath="{.data.admin-password}" 2>/dev/null | base64 -d 2>/dev/null || echo "N/A"); \
+	MINIO_USER=$$(kubectl -n minio get secret minio-credentials -o jsonpath="{.data.rootUser}" 2>/dev/null | base64 -d 2>/dev/null || echo "N/A"); \
+	MINIO_PASS=$$(kubectl -n minio get secret minio-credentials -o jsonpath="{.data.rootPassword}" 2>/dev/null | base64 -d 2>/dev/null || echo "N/A"); \
+	LAKEFS_KEY=$$(kubectl -n lakefs get secret lakefs-credentials -o jsonpath="{.data.access-key-id}" 2>/dev/null | base64 -d 2>/dev/null || echo "N/A"); \
+	LAKEFS_SECRET=$$(kubectl -n lakefs get secret lakefs-credentials -o jsonpath="{.data.secret-access-key}" 2>/dev/null | base64 -d 2>/dev/null || echo "N/A"); \
+	echo "$(GREEN)ArgoCD$(RESET)       https://localhost:8080"; \
+	echo "             User: admin"; \
+	echo "             Pass: $$ARGOCD_PWD"; \
+	echo ""; \
+	echo "$(GREEN)JupyterHub$(RESET)   http://localhost:8000"; \
+	echo "             User: any username"; \
+	echo "             Pass: any password"; \
+	echo ""; \
+	echo "$(GREEN)Dagster$(RESET)      http://localhost:3000"; \
+	echo "             (no auth)"; \
+	echo ""; \
+	echo "$(GREEN)LakeFS$(RESET)       http://localhost:8001"; \
+	echo "             Access Key: $$LAKEFS_KEY"; \
+	echo "             Secret Key: $$LAKEFS_SECRET"; \
+	echo ""; \
+	echo "$(GREEN)MinIO$(RESET)        http://localhost:9001"; \
+	echo "             User: $$MINIO_USER"; \
+	echo "             Pass: $$MINIO_PASS"; \
+	echo ""; \
+	echo "$(GREEN)NIM LLM$(RESET)      http://localhost:8002"; \
+	echo "             (OpenAI-compatible, no auth)"; \
+	echo ""; \
+	echo "$(GREEN)Grafana$(RESET)      http://localhost:3001"; \
+	echo "             User: admin"; \
+	echo "             Pass: $$GRAFANA_PWD"; \
+	echo ""; \
+	echo "$(GREEN)Prometheus$(RESET)   http://localhost:9090"; \
+	echo "             (no auth)"; \
+	echo ""
+	@echo "$(CYAN)══════════════════════════════════════════════════════════════$(RESET)"
+	@echo ""
+	@echo "Run $(YELLOW)make port-forward-all$(RESET) to access these services."
 
 apply-secrets: ## Apply encrypted secrets to cluster
 	@./scripts/apply-secrets.sh
@@ -282,6 +361,58 @@ argocd-password: ## Get ArgoCD admin password
 
 grafana-password: ## Get Grafana admin password
 	@kubectl -n monitoring get secret monitoring-grafana -o jsonpath="{.data.admin-password}" | base64 -d && echo
+
+minio-credentials: ## Get MinIO root credentials
+	@echo "MinIO Credentials:"
+	@echo -n "  User: " && kubectl -n minio get secret minio-credentials -o jsonpath="{.data.rootUser}" | base64 -d && echo
+	@echo -n "  Pass: " && kubectl -n minio get secret minio-credentials -o jsonpath="{.data.rootPassword}" | base64 -d && echo
+
+lakefs-credentials: ## Get LakeFS access credentials
+	@echo "LakeFS Credentials:"
+	@echo -n "  Access Key: " && kubectl -n lakefs get secret lakefs-credentials -o jsonpath="{.data.access-key-id}" | base64 -d && echo
+	@echo -n "  Secret Key: " && kubectl -n lakefs get secret lakefs-credentials -o jsonpath="{.data.secret-access-key}" | base64 -d && echo
+
+all-credentials: ## Show all service credentials
+	@echo "$(CYAN)══════════════════════════════════════════════════════════════$(RESET)"
+	@echo "$(CYAN)  ALL SERVICE CREDENTIALS$(RESET)"
+	@echo "$(CYAN)══════════════════════════════════════════════════════════════$(RESET)"
+	@echo ""
+	@ARGOCD_PWD=$$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" 2>/dev/null | base64 -d 2>/dev/null || echo "N/A"); \
+	GRAFANA_PWD=$$(kubectl -n monitoring get secret monitoring-grafana -o jsonpath="{.data.admin-password}" 2>/dev/null | base64 -d 2>/dev/null || echo "N/A"); \
+	MINIO_USER=$$(kubectl -n minio get secret minio-credentials -o jsonpath="{.data.rootUser}" 2>/dev/null | base64 -d 2>/dev/null || echo "N/A"); \
+	MINIO_PASS=$$(kubectl -n minio get secret minio-credentials -o jsonpath="{.data.rootPassword}" 2>/dev/null | base64 -d 2>/dev/null || echo "N/A"); \
+	LAKEFS_KEY=$$(kubectl -n lakefs get secret lakefs-credentials -o jsonpath="{.data.access-key-id}" 2>/dev/null | base64 -d 2>/dev/null || echo "N/A"); \
+	LAKEFS_SECRET=$$(kubectl -n lakefs get secret lakefs-credentials -o jsonpath="{.data.secret-access-key}" 2>/dev/null | base64 -d 2>/dev/null || echo "N/A"); \
+	echo "$(GREEN)ArgoCD$(RESET)       https://localhost:8080"; \
+	echo "             User: admin"; \
+	echo "             Pass: $$ARGOCD_PWD"; \
+	echo ""; \
+	echo "$(GREEN)JupyterHub$(RESET)   http://localhost:8000"; \
+	echo "             User: any username"; \
+	echo "             Pass: any password"; \
+	echo ""; \
+	echo "$(GREEN)Dagster$(RESET)      http://localhost:3000"; \
+	echo "             (no auth)"; \
+	echo ""; \
+	echo "$(GREEN)LakeFS$(RESET)       http://localhost:8001"; \
+	echo "             Access Key: $$LAKEFS_KEY"; \
+	echo "             Secret Key: $$LAKEFS_SECRET"; \
+	echo ""; \
+	echo "$(GREEN)MinIO$(RESET)        http://localhost:9001"; \
+	echo "             User: $$MINIO_USER"; \
+	echo "             Pass: $$MINIO_PASS"; \
+	echo ""; \
+	echo "$(GREEN)NIM LLM$(RESET)      http://localhost:8002"; \
+	echo "             (OpenAI-compatible, no auth)"; \
+	echo ""; \
+	echo "$(GREEN)Grafana$(RESET)      http://localhost:3001"; \
+	echo "             User: admin"; \
+	echo "             Pass: $$GRAFANA_PWD"; \
+	echo ""; \
+	echo "$(GREEN)Prometheus$(RESET)   http://localhost:9090"; \
+	echo "             (no auth)"; \
+	echo ""
+	@echo "$(CYAN)══════════════════════════════════════════════════════════════$(RESET)"
 
 # =============================================================================
 # Instance Lifecycle
