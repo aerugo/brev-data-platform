@@ -426,7 +426,34 @@ echo -e "${GREEN}GPU availability:${NC}"
 kubectl describe nodes | grep -A 5 "nvidia.com/gpu" || echo "  GPU resources not yet visible (may take a minute)"
 
 # =============================================================================
-# Step 11: Save configuration
+# Step 11: Deploy KAI Scheduler
+# =============================================================================
+
+echo ""
+echo -e "${CYAN}=========================================${NC}"
+echo -e "${CYAN}  Deploying KAI Scheduler${NC}"
+echo -e "${CYAN}=========================================${NC}"
+echo ""
+
+# Check if KAI is already installed
+if kubectl get ns kai-scheduler &>/dev/null && kubectl get pods -n kai-scheduler --no-headers 2>/dev/null | grep -q Running; then
+    echo -e "${YELLOW}KAI Scheduler already deployed, skipping...${NC}"
+else
+    echo -e "${CYAN}Installing KAI Scheduler v0.12.9...${NC}"
+    helm upgrade -i kai-scheduler oci://ghcr.io/nvidia/kai-scheduler/kai-scheduler \
+        -n kai-scheduler --create-namespace \
+        --version v0.12.9 \
+        --wait --timeout 5m
+    echo -e "${GREEN}KAI Scheduler deployed!${NC}"
+fi
+
+# Verify KAI pods
+echo ""
+echo "KAI Scheduler pods:"
+kubectl get pods -n kai-scheduler
+
+# =============================================================================
+# Step 12: Save configuration (before secrets so .env.local is updated)
 # =============================================================================
 
 echo ""
@@ -448,25 +475,250 @@ fi
 echo -e "${GREEN}Instance name saved to .env.local${NC}"
 
 # =============================================================================
-# Summary
+# Step 13: Create and Apply Secrets
 # =============================================================================
 
 echo ""
 echo -e "${CYAN}=========================================${NC}"
-echo -e "${CYAN}  Setup Complete!${NC}"
+echo -e "${CYAN}  Creating Kubernetes Secrets${NC}"
 echo -e "${CYAN}=========================================${NC}"
 echo ""
-echo -e "${GREEN}Instance:${NC} ${INSTANCE_NAME}"
-echo -e "${GREEN}Kubeconfig:${NC} ${KUBECONFIG_DIR}/config-${INSTANCE_NAME}"
-echo -e "${GREEN}SSH Tunnel:${NC} localhost:6443 -> ${INSTANCE_NAME}:6443"
+
+# Check if .env.local has required credentials
+HAS_CREDENTIALS=false
+if [ -f "${PROJECT_ROOT}/.env.local" ]; then
+    source "${PROJECT_ROOT}/.env.local"
+    if [ -n "$MINIO_ROOT_USER" ] && [ -n "$MINIO_ROOT_PASSWORD" ]; then
+        HAS_CREDENTIALS=true
+    fi
+fi
+
+if [ "$HAS_CREDENTIALS" = "true" ]; then
+    echo -e "${CYAN}Creating secrets from .env.local...${NC}"
+    echo ""
+
+    # MinIO secrets
+    echo "  Creating MinIO secrets..."
+    kubectl create secret generic minio-credentials -n minio \
+        --from-literal=rootUser="$MINIO_ROOT_USER" \
+        --from-literal=rootPassword="$MINIO_ROOT_PASSWORD" \
+        --dry-run=client -o yaml | kubectl apply -f -
+
+    # LakeFS secrets
+    echo "  Creating LakeFS secrets..."
+    AUTH_KEY=$(openssl rand -base64 32)
+    kubectl create secret generic lakefs-credentials -n lakefs \
+        --from-literal=auth_encrypt_secret_key="$AUTH_KEY" \
+        --from-literal=access-key-id="${LAKEFS_ACCESS_KEY_ID:-admin}" \
+        --from-literal=secret-access-key="${LAKEFS_SECRET_ACCESS_KEY:-$(openssl rand -base64 32)}" \
+        --dry-run=client -o yaml | kubectl apply -f -
+
+    kubectl create secret generic minio-credentials -n lakefs \
+        --from-literal=rootUser="$MINIO_ROOT_USER" \
+        --from-literal=rootPassword="$MINIO_ROOT_PASSWORD" \
+        --dry-run=client -o yaml | kubectl apply -f -
+
+    # NVIDIA AI secrets (if NGC key provided)
+    if [ -n "$NGC_API_KEY" ]; then
+        echo "  Creating NVIDIA AI secrets..."
+        kubectl create secret generic ngc-credentials -n nvidia-ai \
+            --from-literal=api-key="$NGC_API_KEY" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+        kubectl create secret docker-registry ngc-image-pull -n nvidia-ai \
+            --docker-server=nvcr.io \
+            --docker-username='$oauthtoken' \
+            --docker-password="$NGC_API_KEY" \
+            --dry-run=client -o yaml | kubectl apply -f -
+    fi
+
+    # Dagster secrets
+    echo "  Creating Dagster secrets..."
+    kubectl create secret generic dagster-env-secrets -n dagster \
+        --from-literal=MINIO_ENDPOINT="minio.minio.svc.cluster.local:9000" \
+        --from-literal=MINIO_ACCESS_KEY="$MINIO_ROOT_USER" \
+        --from-literal=MINIO_SECRET_KEY="$MINIO_ROOT_PASSWORD" \
+        --from-literal=LAKEFS_ENDPOINT="http://lakefs.lakefs.svc.cluster.local:8000" \
+        --from-literal=LAKEFS_ACCESS_KEY_ID="${LAKEFS_ACCESS_KEY_ID:-admin}" \
+        --from-literal=LAKEFS_SECRET_ACCESS_KEY="${LAKEFS_SECRET_ACCESS_KEY:-}" \
+        --from-literal=NIM_ENDPOINT="http://nim-llm.nvidia-ai.svc.cluster.local:8000" \
+        --from-literal=NGC_API_KEY="${NGC_API_KEY:-}" \
+        --dry-run=client -o yaml | kubectl apply -f -
+
+    # ArgoCD repo credentials (if GitHub PAT provided)
+    if [ -n "$GITHUB_PAT" ]; then
+        echo "  Creating ArgoCD repo credentials..."
+        kubectl create secret generic repo-credentials -n argocd \
+            --from-literal=type=git \
+            --from-literal=url="https://github.com/${GITHUB_REPO:-aerugo/brev-data-platform}.git" \
+            --from-literal=username=git \
+            --from-literal=password="$GITHUB_PAT" \
+            --dry-run=client -o yaml | kubectl apply -f -
+        kubectl label secret repo-credentials -n argocd argocd.argoproj.io/secret-type=repository --overwrite
+    fi
+
+    echo ""
+    echo -e "${GREEN}Secrets created!${NC}"
+else
+    echo -e "${YELLOW}No credentials found in .env.local${NC}"
+    echo "To configure secrets later:"
+    echo "  1. Copy .env.example to .env.local"
+    echo "  2. Fill in your credentials"
+    echo "  3. Run: make apply-secrets"
+    echo ""
+fi
+
+# =============================================================================
+# Step 14: Install ArgoCD
+# =============================================================================
+
 echo ""
-echo -e "${YELLOW}To use kubectl:${NC}"
-echo "  export KUBECONFIG=${KUBECONFIG_DIR}/config-${INSTANCE_NAME}"
+echo -e "${CYAN}=========================================${NC}"
+echo -e "${CYAN}  Installing ArgoCD${NC}"
+echo -e "${CYAN}=========================================${NC}"
 echo ""
-echo -e "${YELLOW}Next steps:${NC}"
-echo "  1. make bootstrap-kai      # Deploy KAI Scheduler (Phase 4)"
-echo "  2. make bootstrap-argocd   # Deploy ArgoCD (Phase 5)"
+
+# Check if ArgoCD is already installed
+if kubectl get deployment argocd-server -n argocd &>/dev/null; then
+    echo -e "${YELLOW}ArgoCD already installed, skipping...${NC}"
+else
+    echo -e "${CYAN}Adding ArgoCD Helm repo...${NC}"
+    helm repo add argo https://argoproj.github.io/argo-helm
+    helm repo update
+
+    echo -e "${CYAN}Installing ArgoCD...${NC}"
+    VALUES_FILE="${PROJECT_ROOT}/k8s/bootstrap/argocd/values.yaml"
+    if [ -f "$VALUES_FILE" ]; then
+        helm upgrade --install argocd argo/argo-cd \
+            --namespace argocd \
+            --create-namespace \
+            -f "$VALUES_FILE" \
+            --set server.extraArgs="{--insecure}" \
+            --wait \
+            --timeout 5m
+    else
+        helm upgrade --install argocd argo/argo-cd \
+            --namespace argocd \
+            --create-namespace \
+            --set server.extraArgs="{--insecure}" \
+            --wait \
+            --timeout 5m
+    fi
+
+    echo -e "${CYAN}Waiting for ArgoCD to be ready...${NC}"
+    kubectl wait --for=condition=available deployment/argocd-server -n argocd --timeout=300s
+    echo -e "${GREEN}ArgoCD installed!${NC}"
+fi
+
+# =============================================================================
+# Step 15: Deploy App-of-Apps
+# =============================================================================
+
 echo ""
-echo -e "${YELLOW}To reconnect SSH tunnel later:${NC}"
-echo "  make ssh-tunnel"
+echo -e "${CYAN}=========================================${NC}"
+echo -e "${CYAN}  Deploying App-of-Apps${NC}"
+echo -e "${CYAN}=========================================${NC}"
+echo ""
+
+APP_OF_APPS="${PROJECT_ROOT}/k8s/bootstrap/argocd/app-of-apps.yaml"
+
+if [ -f "$APP_OF_APPS" ]; then
+    # Check if already deployed
+    if kubectl get application brev-data-platform -n argocd &>/dev/null; then
+        echo -e "${YELLOW}App-of-apps already deployed, syncing...${NC}"
+        kubectl apply -f "$APP_OF_APPS"
+    else
+        echo -e "${CYAN}Deploying app-of-apps...${NC}"
+        kubectl apply -f "$APP_OF_APPS"
+    fi
+    echo -e "${GREEN}App-of-apps deployed!${NC}"
+    echo ""
+    echo "ArgoCD will now automatically deploy all applications."
+    echo "This may take several minutes for all pods to start."
+else
+    echo -e "${YELLOW}App-of-apps not found at $APP_OF_APPS${NC}"
+    echo "You can deploy manually later with:"
+    echo "  kubectl apply -f k8s/bootstrap/argocd/app-of-apps.yaml"
+fi
+
+# =============================================================================
+# Step 16: Final Summary
+# =============================================================================
+
+# Get credentials for display
+ARGOCD_PWD=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" 2>/dev/null | base64 -d 2>/dev/null || echo "N/A")
+MINIO_USER=$(kubectl -n minio get secret minio-credentials -o jsonpath="{.data.rootUser}" 2>/dev/null | base64 -d 2>/dev/null || echo "N/A")
+MINIO_PASS=$(kubectl -n minio get secret minio-credentials -o jsonpath="{.data.rootPassword}" 2>/dev/null | base64 -d 2>/dev/null || echo "N/A")
+LAKEFS_KEY=$(kubectl -n lakefs get secret lakefs-credentials -o jsonpath="{.data.access-key-id}" 2>/dev/null | base64 -d 2>/dev/null || echo "N/A")
+LAKEFS_SECRET=$(kubectl -n lakefs get secret lakefs-credentials -o jsonpath="{.data.secret-access-key}" 2>/dev/null | base64 -d 2>/dev/null || echo "N/A")
+
+echo ""
+echo -e "${GREEN}╔═══════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${GREEN}║                    SETUP COMPLETE!                            ║${NC}"
+echo -e "${GREEN}╚═══════════════════════════════════════════════════════════════╝${NC}"
+echo ""
+echo -e "${CYAN}Instance Configuration:${NC}"
+echo "  Instance:    ${INSTANCE_NAME}"
+echo "  Kubeconfig:  ${KUBECONFIG_DIR}/config-${INSTANCE_NAME}"
+echo "  SSH Tunnel:  localhost:6443 -> ${INSTANCE_NAME}:6443"
+echo ""
+echo -e "${CYAN}Deployed Stack:${NC}"
+echo "  ✓ RKE2 Kubernetes with GPU support"
+echo "  ✓ KAI Scheduler for fractional GPU workloads"
+echo "  ✓ ArgoCD for GitOps deployments"
+echo "  ✓ App-of-Apps (all services deploying via ArgoCD)"
+echo ""
+echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
+echo -e "${CYAN}                     NEXT STEPS                                ${NC}"
+echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
+echo ""
+echo -e "${YELLOW}1. Set your kubeconfig:${NC}"
+echo "   export KUBECONFIG=${KUBECONFIG_DIR}/config-${INSTANCE_NAME}"
+echo ""
+echo -e "${YELLOW}2. Wait for ArgoCD to deploy all applications (~5-10 min):${NC}"
+echo "   kubectl get applications -n argocd -w"
+echo ""
+echo -e "${YELLOW}3. Access services via port-forward:${NC}"
+echo "   make port-forward-all"
+echo ""
+echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
+echo -e "${CYAN}                  SERVICE CREDENTIALS                          ${NC}"
+echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
+echo ""
+echo -e "${GREEN}ArgoCD${NC}       https://localhost:8080"
+echo "             User: admin"
+echo "             Pass: ${ARGOCD_PWD}"
+echo ""
+echo -e "${GREEN}Dagster${NC}      http://localhost:3000"
+echo "             (no auth required)"
+echo ""
+echo -e "${GREEN}JupyterHub${NC}   http://localhost:8000"
+echo "             User: any username"
+echo "             Pass: any password"
+echo ""
+echo -e "${GREEN}MinIO${NC}        http://localhost:9001"
+echo "             User: ${MINIO_USER}"
+echo "             Pass: ${MINIO_PASS}"
+echo ""
+echo -e "${GREEN}LakeFS${NC}       http://localhost:8001"
+echo "             Access Key: ${LAKEFS_KEY}"
+echo "             Secret Key: ${LAKEFS_SECRET}"
+echo ""
+echo -e "${GREEN}Grafana${NC}      http://localhost:3001"
+echo "             User: admin"
+echo "             Pass: (run: make grafana-password)"
+echo ""
+echo -e "${GREEN}NIM LLM${NC}      http://localhost:8002"
+echo "             OpenAI-compatible API (no auth)"
+echo ""
+echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
+echo -e "${CYAN}                   USEFUL COMMANDS                             ${NC}"
+echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
+echo ""
+echo "  make port-forward-all     # Forward all services to localhost"
+echo "  make all-credentials      # Show all service credentials"
+echo "  make validate-platform    # Run full platform validation"
+echo "  make ssh-tunnel           # Reconnect SSH tunnel"
+echo "  make stop-instance        # Stop instance (save costs)"
+echo "  make start-instance       # Restart stopped instance"
 echo ""
