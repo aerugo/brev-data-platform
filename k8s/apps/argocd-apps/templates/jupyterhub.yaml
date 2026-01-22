@@ -1,9 +1,9 @@
-# Marimo Application - Interactive Notebooks
-# Sync Wave 2: Platform Layer
+# JupyterHub Application - Multi-user Notebooks with Marimo
+# Sync Wave 2: Platform Layer (replaces standalone Marimo)
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: marimo
+  name: jupyterhub
   namespace: argocd
   annotations:
     argocd.argoproj.io/sync-wave: "2"
@@ -14,10 +14,10 @@ spec:
   source:
     repoURL: https://github.com/aerugo/brev-data-platform.git
     targetRevision: main
-    path: k8s/apps/marimo
+    path: k8s/apps/jupyterhub
   destination:
     server: https://kubernetes.default.svc
-    namespace: marimo
+    namespace: jupyterhub
   syncPolicy:
     automated:
       prune: true

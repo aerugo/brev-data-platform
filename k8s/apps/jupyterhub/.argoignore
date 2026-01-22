@@ -1,0 +1,4 @@
+# Exclude SOPS-encrypted secrets from ArgoCD sync
+# Secrets are applied separately via ./scripts/apply-secrets.sh
+secrets/
+*.enc.yaml

@@ -1,6 +1,0 @@
-apiVersion: v2
-name: marimo
-description: Marimo interactive Python notebooks for Brev Data Platform
-type: application
-version: 0.1.0
-appVersion: "0.10.6"

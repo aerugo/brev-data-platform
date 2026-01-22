@@ -14,7 +14,7 @@ This repository contains Infrastructure as Code (IaC) for deploying a complete d
 | **MinIO** | S3-compatible object storage |
 | **LakeFS** | Git-like data versioning |
 | **Dagster** | Data pipeline orchestration |
-| **Marimo** | Interactive Python notebooks |
+| **JupyterHub + Marimo** | Multi-user interactive notebooks |
 | **NVIDIA NIM** | LLM inference |
 | **Safe Synthesizer** | Synthetic data generation |
 | **Prometheus/Grafana/Loki** | Observability, GPU metrics & logging |
@@ -167,7 +167,7 @@ kubectl get applications -n argocd
 | 6 | LakeFS | ✅ Complete | 10Gi persistent storage |
 | 7 | Monitoring | ✅ Complete | Prometheus, Grafana, Loki, DCGM Exporter |
 | 8 | Dagster | ✅ Complete | Pipeline orchestration with custom user code |
-| 8 | Marimo | ✅ Complete | Interactive notebooks |
+| 8 | JupyterHub + Marimo | ✅ Complete | Multi-user notebooks with GPU profiles |
 | 9 | NVIDIA NIM | ✅ Complete | Llama 3.1 8B Instruct - OpenAI-compatible API |
 | 9 | Safe Synthesizer | ✅ Complete | Scaled to 0 (single GPU constraint - NIM takes priority) |
 
@@ -226,7 +226,7 @@ make port-forward-argocd
 | MinIO | `make port-forward-minio` | http://localhost:9001 | See `.env.local` |
 | LakeFS | `make port-forward-lakefs` | http://localhost:8000 | See `.env.local` |
 | Dagster | `make port-forward-dagster` | http://localhost:3000 | N/A |
-| Marimo | `make port-forward-marimo` | http://localhost:2718 | N/A |
+| JupyterHub | `make port-forward-jupyterhub` | http://localhost:8000 | Any username/password |
 | Grafana | `make port-forward-grafana` | http://localhost:3001 | admin / `make grafana-password` |
 | Prometheus | `make port-forward-prometheus` | http://localhost:9090 | N/A |
 
@@ -260,7 +260,7 @@ make port-forward-argocd     # https://localhost:8080
 make port-forward-dagster    # http://localhost:3000
 make port-forward-minio      # http://localhost:9001
 make port-forward-lakefs     # http://localhost:8000
-make port-forward-marimo     # http://localhost:2718
+make port-forward-jupyterhub # http://localhost:8000
 make port-forward-grafana    # http://localhost:3001
 
 # Secrets
@@ -292,7 +292,7 @@ make validate                # Validate configurations
 │  │         │                  │                   ▲                    ││
 │  │         ▼                  ▼                   │                    ││
 │  │  ┌─────────────┐    ┌─────────────────────────────────────────┐    ││
-│  │  │   Marimo    │    │      NVIDIA AI Enterprise (KAI-scheduled)│    ││
+│  │  │ JupyterHub  │    │      NVIDIA AI Enterprise (KAI-scheduled)│    ││
 │  │  │  Notebooks  │───▶│  ┌─────────┐  ┌──────────────┐          │    ││
 │  │  └─────────────┘    │  │ NIM LLM │  │Safe Synthesize│          │    ││
 │  │                     │  │         │  │              │          │    ││
@@ -444,7 +444,7 @@ brev-data-platform/
 │       │   ├── templates/      # PVC for persistence
 │       │   └── secrets/        # SOPS encrypted secrets
 │       ├── dagster/            # Dagster pipelines
-│       ├── marimo/             # Marimo notebooks
+│       ├── jupyterhub/         # JupyterHub with Marimo
 │       ├── monitoring/         # Prometheus, Grafana, Loki
 │       ├── nvidia-nim/         # NIM LLM inference
 │       └── nvidia-safe-synth/  # Safe Synthesizer
@@ -452,8 +452,8 @@ brev-data-platform/
 │   ├── assets/                 # Dagster assets
 │   ├── io_managers/            # Custom I/O managers
 │   └── resources/              # Dagster resources
-├── marimo/                     # Notebooks
-│   └── notebooks/              # Marimo notebook files
+├── docker/                     # Docker images
+│   └── jupyterhub-singleuser/  # JupyterHub singleuser Dockerfile
 ├── scripts/                    # Automation scripts
 │   ├── setup-instance.sh       # Interactive setup (make setup)
 │   ├── bootstrap-rke2.sh       # RKE2 + NVIDIA installation

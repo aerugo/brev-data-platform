@@ -1,3 +1,0 @@
-# Exclude SOPS encrypted files from ArgoCD sync
-secrets/
-*.enc.yaml

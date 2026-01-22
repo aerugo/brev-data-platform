@@ -1,0 +1,181 @@
+# JupyterHub Helm Chart Values for Brev Data Platform
+# Multi-user notebook environment with Marimo extension
+#
+# Features:
+# - Dummy authentication (any password works) for development
+# - GPU profiles with KAI Scheduler integration
+# - Pre-installed Marimo + data science libraries
+# - Persistent storage per user (10Gi)
+# - MinIO/LakeFS credentials injected as environment variables
+#
+# Access:
+#   make port-forward-jupyterhub
+#   Open http://localhost:8000
+#   Login with any username and any password
+
+jupyterhub:
+  # ==========================================================================
+  # Hub Configuration
+  # ==========================================================================
+  hub:
+    # Resource limits for the hub pod
+    resources:
+      requests:
+        memory: 256Mi
+        cpu: 100m
+      limits:
+        memory: 512Mi
+        cpu: 500m
+
+    # Database configuration (SQLite with PVC for persistence)
+    db:
+      type: sqlite-pvc
+      pvc:
+        accessModes:
+          - ReadWriteOnce
+        storage: 1Gi
+
+    # Authentication - Dummy (any password works)
+    config:
+      Authenticator:
+        admin_users:
+          - admin
+      DummyAuthenticator:
+        password: ""  # Empty means any password is accepted
+      JupyterHub:
+        authenticator_class: dummy
+
+    # Extra configuration for KAI Scheduler and GPU support
+    extraConfig:
+      # Configure KubeSpawner for GPU support with KAI Scheduler
+      spawner-config: |
+        # KAI Scheduler for GPU workloads
+        c.KubeSpawner.scheduler_name = "kai-scheduler"
+
+        # NVIDIA RuntimeClass for GPU pods
+        c.KubeSpawner.extra_pod_config = {
+            "runtimeClassName": "nvidia"
+        }
+
+        # Tolerations for GPU nodes
+        c.KubeSpawner.tolerations = [
+            {
+                "key": "nvidia.com/gpu",
+                "operator": "Exists",
+                "effect": "NoSchedule"
+            }
+        ]
+
+  # ==========================================================================
+  # Proxy Configuration
+  # ==========================================================================
+  proxy:
+    service:
+      type: ClusterIP  # Access via port-forward, no public ingress
+
+    chp:
+      resources:
+        requests:
+          memory: 128Mi
+          cpu: 50m
+        limits:
+          memory: 256Mi
+          cpu: 200m
+
+  # ==========================================================================
+  # Singleuser Pod Configuration
+  # ==========================================================================
+  singleuser:
+    # Custom image with Marimo pre-installed
+    # Initially use jupyter/scipy-notebook, replace with custom image later
+    image:
+      name: quay.io/jupyterhub/k8s-singleuser-sample
+      tag: "4.3.2"
+      pullPolicy: IfNotPresent
+
+    # Default resources (CPU profile)
+    cpu:
+      limit: 2
+      guarantee: 0.5
+    memory:
+      limit: 4G
+      guarantee: 1G
+
+    # Persistent storage for user notebooks
+    storage:
+      type: dynamic
+      dynamic:
+        storageClass: ""  # Use cluster default
+      capacity: 10Gi
+      homeMountPath: /home/jovyan
+
+    # Environment variables from secrets
+    extraEnv:
+      MINIO_ENDPOINT:
+        valueFrom:
+          secretKeyRef:
+            name: jupyterhub-env-secrets
+            key: MINIO_ENDPOINT
+      MINIO_ACCESS_KEY:
+        valueFrom:
+          secretKeyRef:
+            name: jupyterhub-env-secrets
+            key: MINIO_ACCESS_KEY
+      MINIO_SECRET_KEY:
+        valueFrom:
+          secretKeyRef:
+            name: jupyterhub-env-secrets
+            key: MINIO_SECRET_KEY
+      LAKEFS_ENDPOINT:
+        valueFrom:
+          secretKeyRef:
+            name: jupyterhub-env-secrets
+            key: LAKEFS_ENDPOINT
+      LAKEFS_ACCESS_KEY_ID:
+        valueFrom:
+          secretKeyRef:
+            name: jupyterhub-env-secrets
+            key: LAKEFS_ACCESS_KEY_ID
+      LAKEFS_SECRET_ACCESS_KEY:
+        valueFrom:
+          secretKeyRef:
+            name: jupyterhub-env-secrets
+            key: LAKEFS_SECRET_ACCESS_KEY
+
+    # Profile list - users choose at spawn time
+    profileList:
+      - display_name: "Standard (CPU only)"
+        description: "2 CPU cores, 4GB RAM - for data analysis and light workloads"
+        default: true
+
+      - display_name: "GPU Server (1x NVIDIA GPU)"
+        description: "2 CPU cores, 8GB RAM, 1x NVIDIA GPU - for ML/AI workloads"
+        kubespawner_override:
+          mem_guarantee: 4G
+          mem_limit: 8G
+          extra_resource_limits:
+            nvidia.com/gpu: "1"
+          extra_resource_guarantees:
+            nvidia.com/gpu: "1"
+
+  # ==========================================================================
+  # Scheduling - Disable default user-scheduler (use KAI instead)
+  # ==========================================================================
+  scheduling:
+    userScheduler:
+      enabled: false  # Using KAI Scheduler instead
+
+  # ==========================================================================
+  # RBAC and Service Account
+  # ==========================================================================
+  rbac:
+    create: true
+
+  # ==========================================================================
+  # Cull idle notebooks
+  # ==========================================================================
+  cull:
+    enabled: true
+    timeout: 3600    # 1 hour
+    every: 300       # Check every 5 minutes
+    maxAge: 0        # No max age limit

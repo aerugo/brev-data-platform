@@ -42,7 +42,7 @@ SECRETS=(
     "k8s/apps/nvidia-ai/secrets/secrets.enc.yaml:nvidia-ai"
     "k8s/apps/argocd-apps/secrets/secrets.enc.yaml:argocd"
     "k8s/apps/dagster/secrets/secrets.enc.yaml:dagster"
-    "k8s/apps/marimo/secrets/secrets.enc.yaml:marimo"
+    "k8s/apps/jupyterhub/secrets/secrets.enc.yaml:jupyterhub"
 )
 
 for secret_entry in "${SECRETS[@]}"; do
@@ -62,5 +62,5 @@ echo ""
 echo "=== Secrets applied successfully! ==="
 echo ""
 echo "Verify with:"
-echo "  kubectl get secrets -A | grep -E 'minio|lakefs|ngc|dagster|marimo|repo'"
+echo "  kubectl get secrets -A | grep -E 'minio|lakefs|ngc|dagster|jupyterhub|repo'"
 echo ""

@@ -2,7 +2,7 @@
 .PHONY: help setup delete-instance start-instance stop-instance shell status \
         kubeconfig ssh-tunnel bootstrap-rke2 bootstrap-kai apply-secrets \
         port-forward-argocd port-forward-minio port-forward-lakefs \
-        port-forward-dagster port-forward-marimo port-forward-nim \
+        port-forward-dagster port-forward-jupyterhub port-forward-nim \
         port-forward-grafana port-forward-prometheus port-forward-loki \
         encrypt decrypt edit-secret create-secrets lint validate \
         build-dagster dagster-dev dagster-test \
@@ -117,9 +117,10 @@ port-forward-dagster: ## Forward Dagster UI to localhost:3000
 	@echo "Dagster UI: http://localhost:3000"
 	kubectl port-forward svc/dagster-webserver -n dagster 3000:3000
 
-port-forward-marimo: ## Forward Marimo to localhost:2718
-	@echo "Marimo: http://localhost:2718"
-	kubectl port-forward svc/marimo -n marimo 2718:2718
+port-forward-jupyterhub: ## Forward JupyterHub to localhost:8000
+	@echo "JupyterHub: http://localhost:8000"
+	@echo "Login with any username and any password (dummy auth)"
+	kubectl port-forward svc/proxy-public -n jupyterhub 8000:80
 
 port-forward-nim: ## Forward NIM LLM to localhost:8001
 	@echo "NIM LLM API: http://localhost:8001"
