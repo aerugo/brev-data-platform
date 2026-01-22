@@ -61,10 +61,19 @@ check_kubectl() {
     fi
 
     if ! kubectl cluster-info &> /dev/null; then
+        # Derive instance name from KUBECONFIG if possible
+        local instance_hint=""
+        if [ -n "$KUBECONFIG" ]; then
+            instance_hint=$(basename "$KUBECONFIG" | sed 's/^config-//')
+        fi
         echo -e "${RED}Error: Cannot connect to Kubernetes cluster.${NC}"
         echo "Please ensure:"
         echo "  1. SSH tunnel is running: make ssh-tunnel"
-        echo "  2. KUBECONFIG is set: export KUBECONFIG=~/.kube/config-brev-data-platform-dev"
+        if [ -n "$instance_hint" ]; then
+            echo "  2. KUBECONFIG is set: export KUBECONFIG=~/.kube/config-${instance_hint}"
+        else
+            echo "  2. KUBECONFIG is set: export KUBECONFIG=~/.kube/config-<your-instance-name>"
+        fi
         exit 1
     fi
 }

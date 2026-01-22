@@ -24,11 +24,18 @@ if [ ! -f "$SOPS_AGE_KEY_FILE" ]; then
     exit 1
 fi
 
+# Get instance name from .env.local or KUBECONFIG
+INSTANCE_NAME="${BREV_INSTANCE_NAME:-}"
+if [ -z "$INSTANCE_NAME" ] && [ -f "$PWD/.env.local" ]; then
+    INSTANCE_NAME=$(grep "^BREV_INSTANCE_NAME=" "$PWD/.env.local" 2>/dev/null | cut -d'=' -f2)
+fi
+INSTANCE_NAME="${INSTANCE_NAME:-brev-data-platform}"
+
 # Test cluster connectivity
 if ! kubectl cluster-info &>/dev/null; then
     echo "Error: Cannot connect to cluster"
     echo "Make sure SSH tunnel is running:"
-    echo "  ssh -F ~/.brev/ssh_config -N -L 6443:127.0.0.1:6443 brev-data-platform-dev-host &"
+    echo "  ssh -F ~/.brev/ssh_config -N -L 6443:127.0.0.1:6443 ${INSTANCE_NAME}-host &"
     exit 1
 fi
 
