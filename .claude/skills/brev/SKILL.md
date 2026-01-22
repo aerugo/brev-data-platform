@@ -52,9 +52,11 @@ When creating instances with `-g/--gpu`, common options include:
 
 | Type | GPUs | Use Case |
 |------|------|----------|
-| `n1-highmem-4:nvidia-tesla-t4:1` | 1x T4 | Development, light inference |
-| `a2-highgpu-1g:nvidia-a100-40gb:1` | 1x A100-40GB | Training, large models |
-| `a2-highgpu-2g:nvidia-a100-40gb:2` | 2x A100-40GB | Multi-GPU training |
+| `h200-141gb.1x` | 1x H200-141GB | **REQUIRED for this platform** - fractional GPU sharing |
+| `a100-80gb.1x` | 1x A100-80GB | Insufficient for concurrent GPU workloads |
+| `n1-highmem-4:nvidia-tesla-t4:1` | 1x T4 | NOT SUPPORTED - too small |
+
+**Note**: This platform requires H200 141GB for KAI Scheduler fractional GPU sharing (NIM 70GB + JupyterHub 70GB).
 
 See https://brev.dev/docs/reference/gpu for full list.
 

@@ -101,7 +101,7 @@ This single command handles the **complete setup**:
 7. **App-of-Apps** - Deploys all platform applications
 8. **Verification** - Confirms cluster, GPU, and service availability
 
-> **Note**: Instance creation must be done via the Brev web console (CRUSOE A100 80GB or H200 recommended).
+> **Note**: Instance creation must be done via the Brev web console. **CRUSOE H200 141GB is required** to run the full stack with GPU sharing.
 
 ### Step 6: Access Services
 
@@ -161,13 +161,16 @@ make validate-platform
 
 ## GPU Requirements
 
-This platform requires **minimum NVIDIA A100 GPU (40GB or 80GB)**. Smaller GPUs like T4 (16GB) are NOT supported due to:
+This platform **requires NVIDIA H200 141GB GPU**. Smaller GPUs are NOT supported due to:
 
-- NIM LLM memory requirements
-- Safe Synthesizer memory requirements
-- KAI Scheduler fractional GPU features
+- **NIM LLM**: 70GB VRAM allocation for Llama 3.1 8B (with headroom for larger models)
+- **JupyterHub GPU notebooks**: 70GB VRAM allocation for ML/AI workloads
+- **KAI Scheduler**: Fractional GPU sharing requires sufficient VRAM for concurrent workloads
+- **Total**: 140GB when both NIM and GPU notebooks run simultaneously
 
-See [INVARIANTS.md](docs/invariants/INVARIANTS.md#inv-i003-minimum-a100-gpu-required) for details.
+A100 80GB is insufficient for running NIM + GPU notebooks concurrently with adequate memory.
+
+See [INVARIANTS.md](docs/invariants/INVARIANTS.md#inv-i003-h200-141gb-gpu-required) for details.
 
 ---
 
@@ -318,7 +321,7 @@ Singleuser pods have MinIO and LakeFS credentials injected:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                    NVIDIA BREV INSTANCE (A100 80GB)                     │
+│                    NVIDIA BREV INSTANCE (H200 141GB)                    │
 │  ┌─────────────────────────────────────────────────────────────────────┐│
 │  │                    RKE2 + ArgoCD + KAI Scheduler                    ││
 │  │  ┌─────────────┐    ┌─────────────┐    ┌──────────────┐            ││

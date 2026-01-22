@@ -16,7 +16,7 @@
 image:
   # Available real NIM models from NGC:
   # - nvcr.io/nim/meta/llama-3.1-8b-instruct (8B, fits ~16GB, fast)
-  # - nvcr.io/nim/meta/llama-3.1-70b-instruct (70B, needs A100/H100)
+  # - nvcr.io/nim/meta/llama-3.1-70b-instruct (70B, needs H200 141GB)
   # - nvcr.io/nim/mistralai/mistral-7b-instruct-v0.3 (7B, efficient)
   repository: nvcr.io/nim/meta/llama-3.1-8b-instruct
   tag: "1.3.3"

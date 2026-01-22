@@ -5,10 +5,10 @@ type: application
 version: 0.1.0
 appVersion: "1.15.4"
 
-# GPU Compatibility Notes:
-# - T4 (16GB): Only smallest models (Llama 3.2 1B, Gemma 2 2B) may work
-# - A10G (24GB): Llama 3.1 8B and similar
-# - A100 (40-80GB): Full model support
+# GPU Requirements:
+# - H200 (141GB): REQUIRED - enables 70GB allocation for NIM + 70GB for JupyterHub GPU
+# - A100 (80GB): INSUFFICIENT - cannot support concurrent GPU workloads
+# - T4/A10G: NOT SUPPORTED - too small for production workloads
 #
 # See docs/plans/active/grand_plan/phases/phase-7-nvidia-ai.md for details
 #

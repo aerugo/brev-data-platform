@@ -3,11 +3,11 @@
 # https://docs.nvidia.com/nemo/microservices/latest/generate-private-synthetic-data/
 #
 # Configured for H200 GPU (141GB VRAM)
-# - Safe Synthesizer requires 80GB VRAM (H200 exceeds this requirement)
-# - Full local deployment with GPU inference
-# - Differential privacy-preserving synthetic data generation
+# - Safe Synthesizer requires 80GB VRAM and EXCLUSIVE GPU access
+# - Cannot run concurrently with NIM (which uses 70GB for fractional sharing)
+# - Deployed with replicas: 0 by default; scale up when needed
 #
-# For smaller GPUs (T4/A100-40GB), use values-api-only.yaml
+# Platform requires H200 141GB for NIM + JupyterHub GPU sharing.
 
 # Deployment mode: local (GPU inference) or api-only
 mode: local

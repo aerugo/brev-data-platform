@@ -48,30 +48,27 @@ terraform/
 
 **Rationale**: Environment isolation prevents accidental cross-environment changes.
 
-### INV-I003: Minimum A100 GPU Required
+### INV-I003: H200 141GB GPU Required
 
-Brev instances for this platform MUST have at least an NVIDIA A100 GPU (40GB or 80GB). T4 and smaller GPUs are NOT supported due to:
-- NIM LLM memory requirements (Llama 3 8B needs ~16GB+ for inference)
-- Safe Synthesizer memory requirements
-- KAI Scheduler fractional GPU features
+Brev instances for this platform **MUST** have an NVIDIA H200 141GB GPU. Smaller GPUs (A100 80GB, T4, etc.) are NOT supported due to:
+- **NIM LLM**: 70GB VRAM allocation for Llama 3.1 8B (with headroom for larger models)
+- **JupyterHub GPU notebooks**: 70GB VRAM allocation for ML/AI workloads
+- **KAI Scheduler fractional GPU sharing**: Requires 140GB total for concurrent workloads
+- A100 80GB cannot support NIM + GPU notebooks running simultaneously
 
 ```bash
-# Correct - A100 or better (Brev instance types from web console)
-# CRUSOE provider (recommended - flexible storage/ports, stop/start without data loss):
-INSTANCE_TYPE="a100-80gb.1x"    # A100 80GB - $1.98/hr
+# Correct - H200 141GB (Brev instance from web console)
+# CRUSOE provider (required):
+INSTANCE_TYPE="h200-141gb.1x"    # H200 141GB
 
-# Other providers (check availability):
-# DENVR: 40 GiB or 80 GiB VRAM options
-# LAMBDA: 40 GiB VRAM
-# MASSEDCOMPUTE: 80 GiB VRAM
-
-# Incorrect - insufficient VRAM
-GPU_TYPE="n1-highmem-4:nvidia-tesla-t4:1"       # NEVER - only 16GB
+# Incorrect - insufficient VRAM for concurrent GPU sharing
+INSTANCE_TYPE="a100-80gb.1x"    # INSUFFICIENT - only 80GB
+GPU_TYPE="n1-highmem-4:nvidia-tesla-t4:1"  # NEVER - only 16GB
 ```
 
-**Note**: As of January 2026, A100 instances are only available through non-GCP providers (CRUSOE, DENVR, LAMBDA, etc.) which require creation via Brev web console. The Brev CLI only supports GCP which does not have A100 availability. See INV-I005 for documented exception.
+**Note**: H200 instances are available through CRUSOE provider via Brev web console. The Brev CLI only supports GCP which does not have H200 availability. See INV-I005 for documented exception.
 
-**Rationale**: T4/V100 have only 16GB VRAM which is insufficient for NIM LLM + Safe Synthesizer workloads. A100 40GB is the minimum for running the full stack.
+**Rationale**: The platform uses KAI Scheduler for fractional GPU allocation, allowing NIM LLM (70GB) and JupyterHub GPU notebooks (70GB) to run concurrently. This requires 140GB VRAM minimum, which only H200 141GB provides.
 
 ### INV-I004: Cloud-Init/Script for RKE2 Bootstrap
 
@@ -110,7 +107,7 @@ brev shell instance && apt install something  # NEVER
 **Exceptions that require documentation:**
 - Phase 0 prerequisites (account creation, API key generation) - documented in phase-0.md
 - Initial Age key generation - documented in phase-2.md
-- Brev instance creation via web console (when A100+ GPUs not available via CLI) - documented in phase-3.md
+- Brev instance creation via web console (H200 GPU not available via CLI) - documented in phase-3.md
 - GitHub repository secrets - documented in phase-10.md
 
 **Rationale**: Manual configuration creates drift, is not reproducible, cannot be audited, and will be lost on rebuild.
