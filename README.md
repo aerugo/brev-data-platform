@@ -166,10 +166,10 @@ kubectl get applications -n argocd
 | 6 | MinIO | ✅ Complete | 50Gi persistent storage |
 | 6 | LakeFS | ✅ Complete | 10Gi persistent storage |
 | 7 | Monitoring | ✅ Complete | Prometheus, Grafana, Loki, DCGM Exporter |
-| 8 | Dagster | 🔲 Pending | Pipeline orchestration |
-| 8 | Marimo | 🔲 Pending | Notebooks |
-| 9 | NVIDIA NIM | 🔲 Pending | LLM inference |
-| 9 | Safe Synthesizer | 🔲 Pending | Synthetic data |
+| 8 | Dagster | ✅ Complete | Pipeline orchestration with custom user code |
+| 8 | Marimo | ✅ Complete | Interactive notebooks |
+| 9 | NVIDIA NIM | 🔄 In Progress | Llama 3.1 8B - requires NGC secrets |
+| 9 | Safe Synthesizer | 🔄 In Progress | Scaled to 0 (single GPU constraint) |
 
 ---
 

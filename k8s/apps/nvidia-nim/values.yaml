@@ -67,7 +67,7 @@ env:
     valueFrom:
       secretKeyRef:
         name: ngc-credentials
-        key: NGC_API_KEY
+        key: api-key
   # Model cache location
   - name: NIM_CACHE_PATH
     value: "/opt/nim/.cache"
