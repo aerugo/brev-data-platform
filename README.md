@@ -324,6 +324,111 @@ Singleuser pods have MinIO and LakeFS credentials injected:
 
 ---
 
+## Dagster Pipelines
+
+Dagster provides data pipeline orchestration with pre-built jobs for some example data products.
+
+**Source:** `dagster/` directory | **Documentation:** [dagster/README.md](dagster/README.md)
+
+### Available Pipelines
+
+| Pipeline | Description |
+|----------|-------------|
+| **Central Bank Speeches** | End-to-end AI data product: ingest from Kaggle → embeddings via NIM → classification → LakeFS versioning → Weaviate vector search |
+| **Synthetic Data** | Privacy-preserving synthetic twin using NVIDIA Safe Synthesizer with KAI GPU preemption |
+
+### Running Pipelines
+
+#### Via Dagster UI (Recommended)
+
+```bash
+# 1. Port forward Dagster
+make port-forward-dagster
+
+# 2. Open http://localhost:3000
+
+# 3. Navigate to Jobs → Select a job → Launch Run
+```
+
+#### Available Jobs
+
+| Job | Records | Description |
+|-----|---------|-------------|
+| `speeches_trial_run` | 10 | Test the pipeline end-to-end with minimal data |
+| `speeches_full_run` | All | Process all speeches (~3000 records) |
+| `synthetic_trial_run` | 10 | Test synthetic data generation |
+| `synthetic_full_run` | All | Generate synthetic data for all speeches |
+| `full_pipeline_trial_run` | 10 | Complete pipeline (real + synthetic) |
+
+#### Via CLI
+
+```bash
+# Port forward Dagster first
+make port-forward-dagster
+
+# Then in another terminal, exec into the Dagster pod
+kubectl exec -it -n dagster deploy/dagster-user-deployments-brev-pipelines -- bash
+
+# Run a trial (10 records) - recommended for first run
+dagster job launch -j speeches_trial_run
+
+# Run full pipeline
+dagster job launch -j speeches_full_run
+
+# Custom sample size
+dagster job launch -j speeches_full_run \
+  --config-json '{"ops": {"raw_speeches": {"config": {"sample_size": 50}}}}'
+```
+
+### Pipeline Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     Central Bank Speeches Pipeline                           │
+│                                                                              │
+│  ┌──────────┐    ┌──────────┐    ┌───────────────┐    ┌──────────────────┐ │
+│  │  Kaggle  │───▶│  MinIO   │───▶│ NIM Embedding │───▶│ NIM LLM Classify │ │
+│  │  Ingest  │    │  (raw)   │    │  (vectors)    │    │   (tariffs)      │ │
+│  └──────────┘    └──────────┘    └───────────────┘    └──────────────────┘ │
+│                                          │                     │            │
+│                                          ▼                     ▼            │
+│                                   ┌─────────────┐      ┌─────────────┐     │
+│                                   │  Weaviate   │      │   LakeFS    │     │
+│                                   │(vector DB)  │      │ (versioned) │     │
+│                                   └─────────────┘      └─────────────┘     │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Deploying Pipeline Updates
+
+Pipeline code is deployed automatically via GitOps:
+
+1. **Make changes** to `dagster/` directory
+2. **Push to main** - GitHub Actions builds new Docker image
+3. **ArgoCD syncs** - Automatically deploys new image to cluster
+
+**Manual deployment:**
+```bash
+# Force ArgoCD to sync
+argocd app sync dagster
+
+# Or restart the deployment to pull latest image
+kubectl rollout restart deployment/dagster-user-deployments-brev-pipelines -n dagster
+```
+
+### Monitoring Pipeline Runs
+
+```bash
+# View Dagster logs
+kubectl logs -n dagster -l app=dagster-user-deployments -f
+
+# Check run status in UI
+make port-forward-dagster
+# Open http://localhost:3000 → Runs
+```
+
+---
+
 ## Architecture
 
 ```
