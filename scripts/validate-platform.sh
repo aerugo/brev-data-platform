@@ -118,9 +118,9 @@ validate_namespace_pods() {
     local ns=$1
     local expected_running=$2
 
-    TOTAL=$(kubectl get pods -n "$ns" --no-headers 2>/dev/null | wc -l | tr -d ' ')
-    RUNNING=$(kubectl get pods -n "$ns" --no-headers 2>/dev/null | grep -c "Running" || echo "0")
-    CRASHLOOP=$(kubectl get pods -n "$ns" --no-headers 2>/dev/null | grep -c "CrashLoopBackOff" || echo "0")
+    TOTAL=$(kubectl get pods -n "$ns" --no-headers 2>/dev/null | wc -l | tr -d ' \n')
+    RUNNING=$(kubectl get pods -n "$ns" --no-headers 2>/dev/null | grep -c "Running" | tr -d ' \n' || echo "0")
+    CRASHLOOP=$(kubectl get pods -n "$ns" --no-headers 2>/dev/null | grep -c "CrashLoopBackOff" | tr -d ' \n' || echo "0")
 
     if [[ "$TOTAL" -eq 0 ]]; then
         check_fail "$ns: No pods found"
@@ -146,7 +146,7 @@ validate_all_pods() {
     validate_namespace_pods "jupyterhub" 2
 
     print_subheader "AI Services"
-    validate_namespace_pods "nvidia-nim" 1
+    validate_namespace_pods "nvidia-ai" 1
 
     print_subheader "Monitoring"
     validate_namespace_pods "monitoring" 4
@@ -180,8 +180,8 @@ validate_service_connectivity() {
     fi
 
     # NIM (check if service exists)
-    if kubectl get svc nvidia-nim-llm -n nvidia-nim &>/dev/null; then
-        check_pass "NIM: Service exists at nvidia-nim-llm.nvidia-nim.svc.cluster.local:8000"
+    if kubectl get svc nim-llm -n nvidia-ai &>/dev/null; then
+        check_pass "NIM: Service exists at nim-llm.nvidia-ai.svc.cluster.local:8000"
     else
         check_warn "NIM: Service not found"
     fi
@@ -218,7 +218,7 @@ validate_dagster() {
 
     print_subheader "Dagster Pods"
     # Check webserver
-    WEBSERVER=$(kubectl get pods -n dagster -l app.kubernetes.io/name=dagster-webserver --no-headers 2>/dev/null | grep Running | wc -l | tr -d ' ')
+    WEBSERVER=$(kubectl get pods -n dagster -l component=dagster-webserver --no-headers 2>/dev/null | grep Running | wc -l | tr -d ' \n')
     if [[ "$WEBSERVER" -gt 0 ]]; then
         check_pass "Dagster Webserver running"
     else
@@ -226,7 +226,7 @@ validate_dagster() {
     fi
 
     # Check daemon
-    DAEMON=$(kubectl get pods -n dagster -l app.kubernetes.io/name=dagster-daemon --no-headers 2>/dev/null | grep Running | wc -l | tr -d ' ')
+    DAEMON=$(kubectl get pods -n dagster -l component=dagster-daemon --no-headers 2>/dev/null | grep Running | wc -l | tr -d ' \n')
     if [[ "$DAEMON" -gt 0 ]]; then
         check_pass "Dagster Daemon running"
     else
@@ -234,7 +234,7 @@ validate_dagster() {
     fi
 
     # Check user deployments
-    USER_CODE=$(kubectl get pods -n dagster -l app.kubernetes.io/name=dagster-user-deployments --no-headers 2>/dev/null | grep Running | wc -l | tr -d ' ')
+    USER_CODE=$(kubectl get pods -n dagster -l app.kubernetes.io/name=dagster-user-deployments --no-headers 2>/dev/null | grep Running | wc -l | tr -d ' \n')
     if [[ "$USER_CODE" -gt 0 ]]; then
         check_pass "Dagster User Code (brev-pipelines) running"
     else
@@ -297,7 +297,7 @@ lakefs = LakeFSResource(
     secret_key=os.getenv('LAKEFS_SECRET_ACCESS_KEY', ''),
 )
 nim = NIMResource(
-    endpoint=os.getenv('NIM_ENDPOINT', 'http://nvidia-nim-llm.nvidia-nim.svc.cluster.local:8000'),
+    endpoint=os.getenv('NIM_ENDPOINT', 'http://nim-llm.nvidia-ai.svc.cluster.local:8000'),
 )
 
 context = build_asset_context()
