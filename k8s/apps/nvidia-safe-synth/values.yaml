@@ -22,18 +22,22 @@ image:
 imagePullSecrets:
   - name: ngc-image-pull
 
-replicaCount: 1
+# Set to 0 when NIM is running (only 1 GPU available)
+# Scale up when needed for synthetic data generation
+replicaCount: 0
 
 # GPU resources for H200 (141GB VRAM)
 # Safe Synthesizer recommends 80GB, H200 has 141GB
+# Reduced CPU to fit cluster constraints
+# Note: Set replicaCount to 0 when NIM is running (only 1 GPU available)
 resources:
   requests:
-    memory: 64Gi
-    cpu: 8
+    memory: 32Gi
+    cpu: 4
     nvidia.com/gpu: 1
   limits:
-    memory: 128Gi
-    cpu: 16
+    memory: 64Gi
+    cpu: 8
     nvidia.com/gpu: 1
 
 # Use NVIDIA RuntimeClass (created by bootstrap-rke2.sh)

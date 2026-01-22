@@ -1,0 +1,54 @@
+# KAI Scheduler Queue Configuration
+# Sets resource quotas for GPU workload scheduling
+#
+# The parent queue defines the total cluster resources available for GPU workloads.
+# The default-queue inherits from parent and is used by all GPU pods.
+#
+# Note: KAI Scheduler creates default queues on install, but they have 0 quota.
+# This template overrides them with actual cluster resource limits.
+---
+apiVersion: scheduling.run.ai/v2
+kind: Queue
+metadata:
+  name: default-parent-queue
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  resources:
+    # Total CPU available for GPU workloads (millicores format not needed)
+    cpu:
+      quota: 12000  # 12 cores (node has 12, ~4 used by system)
+      limit: -1     # No upper limit (overcommit allowed)
+      overQuotaWeight: 1
+    # Total GPU available
+    gpu:
+      quota: 1      # 1 H200 GPU
+      limit: -1
+      overQuotaWeight: 1
+    # Total memory available for GPU workloads
+    memory:
+      quota: 120000000000  # ~120GB (node has ~120GB allocatable)
+      limit: -1
+      overQuotaWeight: 1
+---
+apiVersion: scheduling.run.ai/v2
+kind: Queue
+metadata:
+  name: default-queue
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  parentQueue: default-parent-queue
+  resources:
+    cpu:
+      quota: 12000
+      limit: -1
+      overQuotaWeight: 1
+    gpu:
+      quota: 1
+      limit: -1
+      overQuotaWeight: 1
+    memory:
+      quota: 120000000000
+      limit: -1
+      overQuotaWeight: 1

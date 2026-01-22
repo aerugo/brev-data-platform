@@ -31,14 +31,15 @@ replicaCount: 1
 
 # GPU resources for H200 (141GB VRAM)
 # GPT-OSS 120B uses ~80GB with MXFP4 quantization
+# Reduced CPU to fit cluster constraints (12 cores total, ~4 used by system)
 resources:
   requests:
-    memory: 64Gi
-    cpu: 8
+    memory: 32Gi
+    cpu: 4
     nvidia.com/gpu: 1
   limits:
-    memory: 128Gi
-    cpu: 16
+    memory: 64Gi
+    cpu: 8
     nvidia.com/gpu: 1
 
 # Use NVIDIA RuntimeClass (created by bootstrap-rke2.sh)
