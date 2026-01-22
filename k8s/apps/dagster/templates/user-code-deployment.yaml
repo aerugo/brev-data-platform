@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dagster-user-code
+  labels:
+    app: dagster-user-code
+    component: user-code
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dagster-user-code
+  template:
+    metadata:
+      labels:
+        app: dagster-user-code
+    spec:
+      containers:
+        - name: user-code
+          image: "docker.io/dagster/dagster-celery-k8s:{{ .Values.dagster.global.appVersion | default "1.12.11" }}"
+          imagePullPolicy: Always
+          args:
+            - dagster
+            - api
+            - grpc
+            - "-h"
+            - "0.0.0.0"
+            - "-p"
+            - "3030"
+            - "--python-file"
+            - "/opt/dagster/user-code/definitions.py"
+          ports:
+            - name: grpc
+              containerPort: 3030
+              protocol: TCP
+          env:
+            - name: DAGSTER_CURRENT_IMAGE
+              value: "docker.io/dagster/dagster-celery-k8s:{{ .Values.dagster.global.appVersion | default "1.12.11" }}"
+            - name: DAGSTER_K8S_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          resources:
+            requests:
+              memory: 256Mi
+              cpu: 100m
+            limits:
+              memory: 512Mi
+              cpu: 500m
+          readinessProbe:
+            exec:
+              command:
+                - dagster
+                - api
+                - grpc-health-check
+                - "-p"
+                - "3030"
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            exec:
+              command:
+                - dagster
+                - api
+                - grpc-health-check
+                - "-p"
+                - "3030"
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+          volumeMounts:
+            - name: user-code
+              mountPath: /opt/dagster/user-code
+              readOnly: true
+      volumes:
+        - name: user-code
+          configMap:
+            name: dagster-user-code
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dagster-user-code
+  labels:
+    app: dagster-user-code
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3030
+      targetPort: grpc
+      protocol: TCP
+      name: grpc
+  selector:
+    app: dagster-user-code

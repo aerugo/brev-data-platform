@@ -2,6 +2,10 @@
 # Uses the official Dagster Helm chart as a dependency
 
 dagster:
+  global:
+    # App version for image tags
+    appVersion: "1.12.11"
+
   # PostgreSQL for Dagster storage
   postgresql:
     enabled: true
@@ -22,6 +26,13 @@ dagster:
     service:
       type: ClusterIP
       port: 80
+    # Configure workspace to point to our custom user code
+    workspace:
+      enabled: true
+      servers:
+        - host: "dagster-user-code"
+          port: 3030
+          name: "brev-user-code"
 
   # Dagster daemon (schedules, sensors, run queue)
   dagsterDaemon:
@@ -33,12 +44,6 @@ dagster:
       limits:
         memory: 512Mi
         cpu: 500m
-    runCoordinator:
-      enabled: true
-      type: QueuedRunCoordinator
-      config:
-        queuedRunCoordinator:
-          maxConcurrentRuns: 10
 
   # Run launcher configuration
   runLauncher:
@@ -48,25 +53,8 @@ dagster:
         imagePullPolicy: Always
         loadInclusterConfig: true
 
-  # User code deployments - enabled with default example
-  # Will be replaced with custom user code later
+  # Disable the built-in user-deployments subchart
+  # We manage our own user code deployment via templates
   dagster-user-deployments:
-    enabled: true
-    enableSubchart: true
-    deployments:
-      - name: "k8s-example-user-code-1"
-        image:
-          repository: "docker.io/dagster/user-code-example"
-          tag: ~
-          pullPolicy: Always
-        dagsterApiGrpcArgs:
-          - "--python-file"
-          - "/iris_analysis/definitions.py"
-        port: 3030
-        resources:
-          requests:
-            memory: 256Mi
-            cpu: 100m
-          limits:
-            memory: 512Mi
-            cpu: 500m
+    enabled: false
+    enableSubchart: false
