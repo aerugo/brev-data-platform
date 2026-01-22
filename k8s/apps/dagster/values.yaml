@@ -26,13 +26,10 @@ dagster:
     service:
       type: ClusterIP
       port: 80
-    # Configure workspace to point to our custom user code
+    # Configure workspace to use our external ConfigMap
     workspace:
       enabled: true
-      servers:
-        - host: "dagster-user-code"
-          port: 3030
-          name: "brev-user-code"
+      externalConfigmap: dagster-workspace
 
   # Dagster daemon (schedules, sensors, run queue)
   dagsterDaemon:
