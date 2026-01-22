@@ -1,13 +1,12 @@
 #!/bin/bash
 # =============================================================================
-# Brev Data Platform - Instance Setup Script
+# Brev Data Platform - Interactive Setup Script
 # =============================================================================
-# This script automates Phase 3 setup after manual instance creation.
-#
-# Prerequisites:
-# 1. Create A100+ instance via Brev web console (https://brev.nvidia.com)
-# 2. Wait for instance to show "Running" status
-# 3. Run this script
+# This script guides you through the complete setup process:
+# 1. Instance creation (manual via Brev web console)
+# 2. RKE2 + GPU bootstrap
+# 3. Kubeconfig setup
+# 4. SSH tunnel configuration
 #
 # Usage:
 #   ./scripts/setup-instance.sh
@@ -21,17 +20,33 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
+BOLD='\033[1m'
 NC='\033[0m' # No Color
 
 # Configuration
+DEFAULT_INSTANCE_NAME="brev-data-platform-dev"
 SSH_CONFIG="${HOME}/.brev/ssh_config"
 KUBECONFIG_DIR="${HOME}/.kube"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 echo -e "${CYAN}=========================================${NC}"
-echo -e "${CYAN}  Brev Data Platform - Instance Setup${NC}"
+echo -e "${CYAN}  Brev Data Platform - Interactive Setup${NC}"
 echo -e "${CYAN}=========================================${NC}"
+echo ""
+
+# =============================================================================
+# Step 0: Check Brev login
+# =============================================================================
+
+echo -e "${CYAN}Checking Brev CLI...${NC}"
+if ! brev ls &>/dev/null; then
+    echo -e "${RED}Error: Could not connect to Brev. Are you logged in?${NC}"
+    echo ""
+    echo "Run: brev login"
+    exit 1
+fi
+echo -e "${GREEN}Brev CLI connected!${NC}"
 echo ""
 
 # =============================================================================
@@ -42,44 +57,66 @@ if [ -n "$1" ]; then
     INSTANCE_NAME="$1"
     echo -e "${GREEN}Using provided instance name: ${INSTANCE_NAME}${NC}"
 else
-    echo -e "${YELLOW}Available Brev instances:${NC}"
-    echo ""
-    brev ls 2>/dev/null || {
-        echo -e "${RED}Error: Could not list Brev instances. Are you logged in?${NC}"
-        echo "Run: brev login"
-        exit 1
-    }
+    # Check if any instances exist
+    echo -e "${YELLOW}Checking for existing instances...${NC}"
     echo ""
 
-    # Check if any instances exist (look for status keywords in output)
     INSTANCE_COUNT=$(brev ls 2>/dev/null | grep -cE "RUNNING|STARTING|STOPPED" || echo "0")
-    if [ "$INSTANCE_COUNT" -eq 0 ]; then
-        echo -e "${RED}No instances found!${NC}"
-        echo ""
-        echo "Please create an A100+ instance first:"
-        echo "  1. Go to https://brev.nvidia.com"
-        echo "  2. Select A100 (80GB) from CRUSOE provider"
-        echo "  3. Name it: brev-data-platform-dev"
-        echo "  4. Click Deploy and wait for Running status"
-        echo ""
-        echo "Then run this script again."
-        exit 1
-    fi
 
-    echo -e "${YELLOW}Enter the name of the instance to set up:${NC}"
-    read -r -p "> " INSTANCE_NAME
+    if [ "$INSTANCE_COUNT" -eq 0 ]; then
+        # No instances - guide user through creation
+        echo -e "${YELLOW}No instances found. Let's create one!${NC}"
+        echo ""
+        echo -e "${CYAN}Step 1: Set Instance Name${NC}"
+        echo -e "Enter instance name [${GREEN}${DEFAULT_INSTANCE_NAME}${NC}]: "
+        read -r -p "> " INPUT_NAME
+        INSTANCE_NAME="${INPUT_NAME:-$DEFAULT_INSTANCE_NAME}"
+        echo ""
+
+        echo -e "${CYAN}=========================================${NC}"
+        echo -e "${CYAN}  Create Instance via Brev Web Console${NC}"
+        echo -e "${CYAN}=========================================${NC}"
+        echo ""
+        echo -e "${BOLD}Follow these steps:${NC}"
+        echo ""
+        echo "  1. Go to ${GREEN}https://brev.nvidia.com${NC}"
+        echo "  2. Select your organization"
+        echo "  3. Click ${BOLD}GPUs${NC} → Select ${BOLD}A100 • 80 GiB VRAM${NC} from ${BOLD}CRUSOE${NC} provider"
+        echo "     - Instance type: a100-80gb.1x (~\$1.98/hr)"
+        echo "     - Flexible storage, stop/start without data loss"
+        echo "  4. Configure:"
+        echo "     - ${BOLD}Disk Storage${NC}: 256 GiB"
+        echo "     - ${BOLD}Software${NC}: VM Mode w/ Jupyter"
+        echo "     - ${BOLD}Name${NC}: ${GREEN}${INSTANCE_NAME}${NC}"
+        echo "  5. Click ${BOLD}Deploy${NC}"
+        echo ""
+        echo -e "${YELLOW}Wait for the instance to show 'Running' status (~7 minutes)${NC}"
+        echo ""
+        read -r -p "Press Enter when the instance is running... "
+        echo ""
+    else
+        # Instances exist - show them and ask which one to use
+        echo -e "${GREEN}Found existing instances:${NC}"
+        echo ""
+        brev ls
+        echo ""
+        echo -e "${CYAN}Enter instance name [${GREEN}${DEFAULT_INSTANCE_NAME}${NC}]: ${NC}"
+        read -r -p "> " INPUT_NAME
+        INSTANCE_NAME="${INPUT_NAME:-$DEFAULT_INSTANCE_NAME}"
+    fi
 
     if [ -z "$INSTANCE_NAME" ]; then
-        echo -e "${RED}Error: Instance name cannot be empty${NC}"
-        exit 1
+        INSTANCE_NAME="$DEFAULT_INSTANCE_NAME"
     fi
 fi
+
+echo -e "${GREEN}Using instance: ${INSTANCE_NAME}${NC}"
+echo ""
 
 # =============================================================================
 # Step 2: Verify instance exists and is running
 # =============================================================================
 
-echo ""
 echo -e "${CYAN}Verifying instance: ${INSTANCE_NAME}${NC}"
 
 # Parse brev ls output - format: NAME STATUS BUILD SHELL ID MACHINE
@@ -91,6 +128,9 @@ if [ -z "$INSTANCE_LINE" ]; then
     echo ""
     echo "Available instances:"
     brev ls
+    echo ""
+    echo -e "${YELLOW}Did you create the instance in the Brev web console?${NC}"
+    echo "Make sure the name matches exactly: ${INSTANCE_NAME}"
     exit 1
 fi
 

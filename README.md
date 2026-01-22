@@ -58,42 +58,25 @@ echo 'export SOPS_AGE_KEY_FILE=$HOME/.config/sops/age/keys.txt' >> ~/.zshrc
 source ~/.zshrc
 ```
 
-### Step 4: Create A100 Instance (Web Console Required)
-
-> **Important**: The Brev CLI only supports GCP which lacks A100 availability. You must create the instance via the web console.
-
-1. Go to [https://brev.nvidia.com](https://brev.nvidia.com)
-2. Select your organization
-3. Click **GPUs** → Select **A100 • 80 GiB VRAM** from **CRUSOE** provider
-   - Recommended: CRUSOE offers flexible storage, stop/start without data loss
-   - Instance type: `a100-80gb.1x` (~$1.98/hr)
-4. Configure:
-   - **Disk Storage**: 256 GiB
-   - **Software**: VM Mode w/ Jupyter
-   - **Name**: `brev-data-platform-dev`
-5. Click **Deploy** and wait for "Running" status (~7 minutes)
-
-### Step 5: Run Automated Setup
-
-Once your instance is running:
+### Step 4: Run Interactive Setup
 
 ```bash
 make setup
 ```
 
-This interactive script will:
-- Prompt for instance name (or auto-detect)
-- Bootstrap RKE2 with GPU support
-- Fetch kubeconfig to your local machine
-- Setup SSH tunnel for kubectl access
-- Verify cluster connectivity and GPU availability
+This interactive script will guide you through:
+1. **Instance creation** - If no instance exists, shows instructions to create one via [brev.nvidia.com](https://brev.nvidia.com)
+2. **Instance name** - Prompts for name (default: `brev-data-platform-dev`)
+3. **RKE2 bootstrap** - Installs Kubernetes with GPU support
+4. **Kubeconfig** - Fetches credentials to your local machine
+5. **SSH tunnel** - Sets up secure kubectl access
+6. **Verification** - Confirms cluster and GPU availability
 
-### Step 6: Deploy KAI Scheduler
+> **Note**: Instance creation must be done via the Brev web console (CRUSOE A100 80GB recommended, ~$1.98/hr).
+
+### Step 5: Deploy KAI Scheduler
 
 ```bash
-# Ensure SSH tunnel is running (in a separate terminal)
-make ssh-tunnel
-
 # Deploy KAI Scheduler for GPU workloads
 make bootstrap-kai
 
@@ -101,7 +84,7 @@ make bootstrap-kai
 kubectl get pods -n kai-scheduler
 ```
 
-### Step 7: Create Secrets from .env.local
+### Step 6: Create Secrets from .env.local
 
 Before deploying applications, create the required secrets:
 
@@ -138,7 +121,7 @@ kubectl create secret generic repo-creds -n argocd \
 
 > **Note**: If you have the SOPS Age key configured, you can use `make apply-secrets` instead.
 
-### Step 8: Deploy ArgoCD
+### Step 7: Deploy ArgoCD
 
 ```bash
 # Install ArgoCD
@@ -155,7 +138,7 @@ make port-forward-argocd
 # Open https://localhost:8080, login with admin/<password>
 ```
 
-### Step 9: Verify Installation
+### Step 8: Verify Installation
 
 ```bash
 # Check cluster
@@ -254,16 +237,17 @@ make port-forward-argocd
 ```bash
 make help                    # Show all commands
 
-# Instance Management
-make setup                   # Interactive setup (recommended for first time)
-make create-instance-help    # Show web console instructions for A100
+# Setup & Instance Management
+make setup                   # Interactive setup (guides through everything)
 make stop-instance           # Stop instance (saves cost)
 make start-instance          # Start stopped instance
 make delete-instance         # Delete instance (DESTRUCTIVE)
 make shell                   # SSH into instance
 make status                  # Show instance status
+make down                    # Alias for stop-instance
+make destroy                 # Alias for delete-instance
 
-# Kubernetes Setup
+# Kubernetes Setup (usually run via make setup)
 make bootstrap-rke2          # Install RKE2 + NVIDIA on instance
 make bootstrap-kai           # Deploy KAI Scheduler
 make kubeconfig              # Fetch kubeconfig from instance

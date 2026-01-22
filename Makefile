@@ -1,5 +1,5 @@
 # Brev Data Platform - Makefile
-.PHONY: help setup create-instance create-instance-help delete-instance start-instance stop-instance shell status \
+.PHONY: help setup delete-instance start-instance stop-instance shell status \
         kubeconfig ssh-tunnel bootstrap-rke2 bootstrap-kai apply-secrets \
         port-forward-argocd port-forward-minio port-forward-lakefs \
         port-forward-dagster port-forward-marimo port-forward-nim \
@@ -7,17 +7,9 @@
         encrypt decrypt edit-secret create-secrets lint validate \
         build-dagster dagster-dev dagster-test \
         bootstrap-argocd argocd-password grafana-password \
-        up down destroy full-setup
+        down destroy full-setup
 
 INSTANCE_NAME ?= brev-data-platform-dev
-# GPU type - NOTE: The Brev CLI only supports GCP which has limited GPU availability.
-# For A100+ GPUs, use the Brev web console (https://brev.nvidia.com) instead.
-# Recommended: CRUSOE provider "a100-80gb.1x" ($1.98/hr, flexible storage, stop/start safe)
-#
-# CLI-supported GCP types (limited availability):
-#   T4 (16GB):     n1-highmem-4:nvidia-tesla-t4:1  (NOT sufficient for this platform!)
-#   A100:          A100 (if org has GCP A100 quota)
-GPU_TYPE ?= A100
 SSH_CONFIG ?= $(HOME)/.brev/ssh_config
 
 # SOPS Age key file (default location for Age encryption key)
@@ -38,42 +30,10 @@ help: ## Show this help
 # Instance Management
 # =============================================================================
 
-setup: ## Interactive setup - prompts for instance name, then bootstraps RKE2 + kubeconfig + tunnel
+setup: ## Interactive setup - guides through instance creation, bootstraps RKE2 + kubeconfig + tunnel
 	@./scripts/setup-instance.sh $(if $(INSTANCE_NAME),$(INSTANCE_NAME),)
 
-create-instance: ## Create Brev GPU instance (CLI - GCP only, see create-instance-help for A100+)
-	@echo "$(YELLOW)NOTE: Brev CLI only supports GCP. For A100+ GPUs, use web console.$(RESET)"
-	@echo "$(YELLOW)Run 'make create-instance-help' for web console instructions.$(RESET)"
-	@echo ""
-	@echo "$(GREEN)Attempting to create Brev instance with GPU: $(GPU_TYPE)$(RESET)"
-	brev create $(INSTANCE_NAME) -g "$(GPU_TYPE)"
-	@echo ""
-	@echo "$(YELLOW)Wait for instance to be ready, then run:$(RESET)"
-	@echo "  make bootstrap-rke2"
-
-create-instance-help: ## Show instructions for creating A100+ instances via web console
-	@echo "$(GREEN)Creating A100+ Instance via Brev Web Console$(RESET)"
-	@echo ""
-	@echo "The Brev CLI only supports GCP which has limited GPU availability."
-	@echo "For A100+ GPUs, use the web console:"
-	@echo ""
-	@echo "1. Go to https://brev.nvidia.com"
-	@echo "2. Select your organization"
-	@echo "3. Click GPUs → Select A100 • 80 GiB VRAM from CRUSOE provider"
-	@echo "   - Instance type: a100-80gb.1x (~\$$1.98/hr)"
-	@echo "   - Flexible storage, flexible ports, stop/start without data loss"
-	@echo "4. Configure:"
-	@echo "   - Disk Storage: 256 GiB"
-	@echo "   - Software: VM Mode w/ Jupyter"
-	@echo "   - Name: $(INSTANCE_NAME)"
-	@echo "5. Click Deploy and wait ~7 minutes"
-	@echo ""
-	@echo "$(YELLOW)After instance is running:$(RESET)"
-	@echo "  make setup              # Interactive setup (recommended)"
-	@echo "  # OR manually:"
-	@echo "  make bootstrap-rke2"
-	@echo "  make kubeconfig"
-	@echo "  make ssh-tunnel"
+full-setup: setup ## Alias for setup (interactive full stack setup)
 
 delete-instance: ## Delete Brev instance (DESTRUCTIVE)
 	brev delete $(INSTANCE_NAME)
@@ -272,46 +232,8 @@ grafana-password: ## Get Grafana admin password
 	@kubectl -n monitoring get secret monitoring-grafana -o jsonpath="{.data.admin-password}" | base64 -d && echo
 
 # =============================================================================
-# Full Stack Operations
+# Instance Lifecycle
 # =============================================================================
-
-full-setup: ## Complete setup: create instance, bootstrap RKE2 + KAI, configure kubectl
-	@echo "$(GREEN)=== Full Stack Setup ===$(RESET)"
-	@echo ""
-	@echo "Step 1/6: Creating Brev instance..."
-	@$(MAKE) create-instance
-	@echo ""
-	@echo "$(YELLOW)Waiting 90s for instance to be ready...$(RESET)"
-	@sleep 90
-	@echo ""
-	@echo "Step 2/6: Bootstrapping RKE2 with GPU support..."
-	@$(MAKE) bootstrap-rke2
-	@echo ""
-	@echo "Step 3/6: Fetching kubeconfig..."
-	@$(MAKE) kubeconfig
-	@echo ""
-	@echo "Step 4/6: Starting SSH tunnel..."
-	@$(MAKE) ssh-tunnel-bg
-	@echo ""
-	@echo "Step 5/6: Deploying KAI Scheduler..."
-	@export KUBECONFIG=$$PWD/kubeconfig.yaml && $(MAKE) bootstrap-kai
-	@echo ""
-	@echo "Step 6/6: Applying secrets to cluster..."
-	@export KUBECONFIG=$$PWD/kubeconfig.yaml && $(MAKE) apply-secrets
-	@echo ""
-	@echo "$(GREEN)=== Setup Complete! ===$(RESET)"
-	@echo ""
-	@echo "Next steps:"
-	@echo "  export KUBECONFIG=$$PWD/kubeconfig.yaml"
-	@echo "  kubectl get nodes"
-	@echo "  make bootstrap-argocd"
-
-up: create-instance ## Create instance and wait for it to be ready
-	@echo "Waiting for instance to be ready..."
-	@sleep 30
-	@brev ls
-	@echo ""
-	@echo "$(YELLOW)Next: make bootstrap-rke2$(RESET)"
 
 down: stop-instance ## Stop instance to save costs
 	@echo "Instance stopped. Start with 'make start-instance'"
