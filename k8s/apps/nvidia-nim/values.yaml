@@ -2,25 +2,24 @@
 # Based on official NVIDIA documentation:
 # https://docs.nvidia.com/nim/large-language-models/latest/deploy-helm.html
 #
-# Configured for H200 GPU (141GB VRAM)
-# Default model: OpenAI GPT-OSS 120B
-# - 117B parameters (MoE, activates 5.1B per token)
-# - MXFP4 quantized - fits on single 80GB GPU
-# - Apache 2.0 license, 128K context window
-# - Configurable reasoning effort (low/medium/high)
+# Configured for GPU deployment
+# Default model: Meta Llama 3.1 8B Instruct
+# - 8B parameters, fits on most GPUs (~16GB VRAM)
+# - OpenAI-compatible API at /v1/chat/completions
+# - 128K context window
 #
-# Sources:
-# - https://openai.com/index/introducing-gpt-oss/
-# - https://huggingface.co/openai/gpt-oss-120b
+# IMPORTANT: Requires NGC secrets applied first:
+#   ./scripts/apply-secrets.sh
 
-# Container image - OpenAI GPT-OSS 120B
+# Container image - NVIDIA NIM LLM
+# Using Llama 3.1 8B Instruct - smaller model that fits on single GPU
 image:
-  # Available models:
-  # - nvcr.io/nim/openai/gpt-oss-120b:latest     (120B, recommended)
-  # - nvcr.io/nim/openai/gpt-oss-20b:latest      (20B, faster inference)
-  # - nvcr.io/nim/meta/llama-3.1-70b-instruct    (70B, alternative)
-  repository: nvcr.io/nim/openai/gpt-oss-120b
-  tag: "latest"
+  # Available real NIM models from NGC:
+  # - nvcr.io/nim/meta/llama-3.1-8b-instruct (8B, fits ~16GB, fast)
+  # - nvcr.io/nim/meta/llama-3.1-70b-instruct (70B, needs A100/H100)
+  # - nvcr.io/nim/mistralai/mistral-7b-instruct-v0.3 (7B, efficient)
+  repository: nvcr.io/nim/meta/llama-3.1-8b-instruct
+  tag: "1.3.3"
   pullPolicy: IfNotPresent
 
 # NGC image pull secret (created by apply-secrets.sh)
@@ -75,9 +74,6 @@ env:
   # Logging level
   - name: NIM_LOG_LEVEL
     value: "INFO"
-  # GPT-OSS reasoning effort: low, medium, high
-  - name: GPT_OSS_REASONING_EFFORT
-    value: "medium"
 
 # Model cache persistence
 # GPT-OSS 120B is ~60GB quantized
