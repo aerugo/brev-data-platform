@@ -401,7 +401,7 @@ make port-forward-grafana
 
 ### NIM LLM Metrics
 
-NIM exposes Prometheus metrics at `/metrics`:
+NIM exposes Prometheus metrics at `/v1/metrics`:
 
 | Metric | Description |
 |--------|-------------|
