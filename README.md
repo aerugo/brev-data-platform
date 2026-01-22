@@ -83,7 +83,7 @@ make setup
 
 This interactive script will guide you through:
 1. **Instance creation** - If no instance exists, shows instructions to create one via [brev.nvidia.com](https://brev.nvidia.com)
-2. **Instance name** - Prompts for name (default: `brev-data-platform-dev`)
+2. **Instance name** - Prompts for name (default: `brev-data-platform`)
 3. **RKE2 bootstrap** - Installs Kubernetes with GPU support
 4. **Kubeconfig** - Fetches credentials to your local machine
 5. **SSH tunnel** - Sets up secure kubectl access
@@ -208,20 +208,20 @@ See [INVARIANTS.md](docs/invariants/INVARIANTS.md#inv-i003-minimum-a100-gpu-requ
 
 ```bash
 # 1. Start instance (if stopped)
-brev start brev-data-platform-dev
+brev start brev-data-platform
 
 # 2. Setup SSH tunnel
 make ssh-tunnel
 
 # 3. Set kubeconfig
-export KUBECONFIG=~/.kube/config-brev-data-platform-dev
+export KUBECONFIG=~/.kube/config-brev-data-platform
 ```
 
 ### Stop to Save Costs
 
 ```bash
 # Stop instance when not in use (CRUSOE instances retain data)
-brev stop brev-data-platform-dev
+brev stop brev-data-platform
 ```
 
 ### Access Services
@@ -233,7 +233,7 @@ All services are accessed via kubectl port-forward through SSH tunnel:
 make ssh-tunnel-bg
 
 # Terminal 2: Port forward all services (recommended)
-export KUBECONFIG=~/.kube/config-brev-data-platform-dev
+export KUBECONFIG=~/.kube/config-brev-data-platform
 make port-forward-all
 ```
 

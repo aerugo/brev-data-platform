@@ -11,7 +11,7 @@
         minio-credentials lakefs-credentials all-credentials \
         down destroy full-setup
 
-INSTANCE_NAME ?= brev-data-platform-dev
+INSTANCE_NAME ?= brev-data-platform
 SSH_CONFIG ?= $(HOME)/.brev/ssh_config
 
 # SOPS Age key file (default location for Age encryption key)

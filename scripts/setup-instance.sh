@@ -28,7 +28,7 @@ BOLD='\033[1m'
 NC='\033[0m' # No Color
 
 # Configuration
-DEFAULT_INSTANCE_NAME="brev-data-platform-dev"
+DEFAULT_INSTANCE_NAME="brev-data-platform"
 SSH_CONFIG="${HOME}/.brev/ssh_config"
 KUBECONFIG_DIR="${HOME}/.kube"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

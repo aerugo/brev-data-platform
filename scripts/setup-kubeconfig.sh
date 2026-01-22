@@ -4,7 +4,7 @@
 
 set -e
 
-INSTANCE_NAME="${1:-brev-data-platform-dev}"
+INSTANCE_NAME="${1:-brev-data-platform}"
 KUBECONFIG_PATH="./kubeconfig.yaml"
 SSH_CONFIG="$HOME/.brev/ssh_config"
 
