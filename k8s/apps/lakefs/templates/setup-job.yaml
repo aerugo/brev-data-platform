@@ -56,6 +56,41 @@ spec:
                 echo "LakeFS may have been previously initialized."
               fi
 
+              {{- if .Values.repository.enabled }}
+              # Create repository
+              echo "Creating LakeFS repository '{{ .Values.repository.name }}'..."
+              AUTH_HEADER=$(echo -n "$LAKEFS_ACCESS_KEY_ID:$LAKEFS_SECRET_ACCESS_KEY" | base64)
+              REPO_RESULT=$(wget -q -O- --post-data='{"name":"{{ .Values.repository.name }}","storage_namespace":"{{ .Values.repository.storageNamespace }}","default_branch":"{{ .Values.repository.defaultBranch }}"}' \
+                --header='Content-Type: application/json' \
+                --header="Authorization: Basic $AUTH_HEADER" \
+                http://lakefs.{{ .Release.Namespace }}.svc.cluster.local:8000/api/v1/repositories 2>&1 || true)
+
+              if echo "$REPO_RESULT" | grep -q '"id"'; then
+                echo "Repository '{{ .Values.repository.name }}' created successfully!"
+              elif echo "$REPO_RESULT" | grep -q "already exists"; then
+                echo "Repository '{{ .Values.repository.name }}' already exists."
+              else
+                echo "Repository result: $REPO_RESULT"
+              fi
+
+              {{- range .Values.repository.branches }}
+              # Create branch '{{ . }}'
+              echo "Creating branch '{{ . }}'..."
+              BRANCH_RESULT=$(wget -q -O- --post-data='{"name":"{{ . }}","source":"{{ $.Values.repository.defaultBranch }}"}' \
+                --header='Content-Type: application/json' \
+                --header="Authorization: Basic $AUTH_HEADER" \
+                http://lakefs.{{ $.Release.Namespace }}.svc.cluster.local:8000/api/v1/repositories/{{ $.Values.repository.name }}/branches 2>&1 || true)
+
+              if echo "$BRANCH_RESULT" | grep -q '"commit_id"\|"id"'; then
+                echo "Branch '{{ . }}' created successfully!"
+              elif echo "$BRANCH_RESULT" | grep -q "already exists"; then
+                echo "Branch '{{ . }}' already exists."
+              else
+                echo "Branch result: $BRANCH_RESULT"
+              fi
+              {{- end }}
+              {{- end }}
+
               echo "Setup job complete."
           env:
             - name: LAKEFS_ACCESS_KEY_ID

@@ -1,8 +1,23 @@
 # LakeFS Helm Chart Values
 # Uses the official LakeFS Helm chart as a dependency
 
+# Repository auto-setup configuration
+repository:
+  # Whether to auto-create repository on setup
+  enabled: true
+  # Repository name in LakeFS
+  name: data
+  # Default branch (created with repository)
+  defaultBranch: main
+  # Storage location in MinIO (s3://bucket/path)
+  storageNamespace: s3://lakefs/data
+  # Additional branches to create after repository
+  branches:
+    - staging
+
 lakefs:
   # LakeFS configuration
+  # Note: S3 credentials are set via LAKEFS_BLOCKSTORE_S3_CREDENTIALS_* env vars below
   lakefsConfig: |
     database:
       type: local
@@ -14,21 +29,19 @@ lakefs:
         endpoint: http://minio.minio.svc.cluster.local:9000
         force_path_style: true
         discover_bucket_region: false
-        credentials:
-          access_key_id: $(AWS_ACCESS_KEY_ID)
-          secret_access_key: $(AWS_SECRET_ACCESS_KEY)
     auth:
       encrypt:
         secret_key: "a]$u9Yv-<M(5%dQh"
 
   # Environment variables for S3/MinIO credentials
+  # LakeFS uses LAKEFS_ prefixed env vars to override config
   extraEnvVars:
-    - name: AWS_ACCESS_KEY_ID
+    - name: LAKEFS_BLOCKSTORE_S3_CREDENTIALS_ACCESS_KEY_ID
       valueFrom:
         secretKeyRef:
           name: minio-credentials
           key: rootUser
-    - name: AWS_SECRET_ACCESS_KEY
+    - name: LAKEFS_BLOCKSTORE_S3_CREDENTIALS_SECRET_ACCESS_KEY
       valueFrom:
         secretKeyRef:
           name: minio-credentials
