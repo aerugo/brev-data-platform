@@ -63,6 +63,5 @@ dagster:
           limits:
             memory: 1Gi
             cpu: 1000m
-        envFrom:
-          - secretRef:
-              name: dagster-env-secrets
+        envSecrets:
+          - name: dagster-env-secrets
