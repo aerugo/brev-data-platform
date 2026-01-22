@@ -168,23 +168,6 @@ make validate-platform
 
 ---
 
-## Current Status
-
-| Phase | Component | Status | Notes |
-|-------|-----------|--------|-------|
-| 3 | RKE2 + GPU | ✅ Complete | Enterprise K8s with NVIDIA device plugin |
-| 4 | KAI Scheduler | ✅ Complete | v0.12.9 from NVIDIA OCI registry |
-| 5 | ArgoCD | ✅ Complete | GitOps with app-of-apps pattern |
-| 6 | MinIO | ✅ Complete | 50Gi persistent storage |
-| 6 | LakeFS | ✅ Complete | 10Gi persistent storage |
-| 7 | Monitoring | ✅ Complete | Prometheus, Grafana, Loki, DCGM Exporter |
-| 8 | Dagster | ✅ Complete | Pipeline orchestration with custom user code |
-| 8 | JupyterHub + Marimo | ✅ Complete | Multi-user notebooks with custom image ([ghcr.io/aerugo/jupyterhub-singleuser](https://github.com/aerugo/jupyterhub-singleuser)) |
-| 9 | NVIDIA NIM | ✅ Complete | Llama 3.1 8B Instruct - OpenAI-compatible API |
-| 9 | Safe Synthesizer | ✅ Complete | Scaled to 0 (single GPU constraint - NIM takes priority) |
-
----
-
 ## GPU Requirements
 
 This platform **requires NVIDIA H200 141GB GPU**. Smaller GPUs are NOT supported due to:
@@ -195,8 +178,6 @@ This platform **requires NVIDIA H200 141GB GPU**. Smaller GPUs are NOT supported
 - **Total**: 140GB when both NIM and GPU notebooks run simultaneously
 
 A100 80GB is insufficient for running NIM + GPU notebooks concurrently with adequate memory.
-
-See [INVARIANTS.md](docs/invariants/INVARIANTS.md#inv-i003-h200-141gb-gpu-required) for details.
 
 ---
 
@@ -552,63 +533,6 @@ make create-instance-help
 
 ---
 
-## Repository Structure
-
-```
-brev-data-platform/
-├── k8s/                        # Kubernetes manifests
-│   ├── bootstrap/              # Bootstrap configurations
-│   │   └── argocd/             # ArgoCD Helm values + app-of-apps
-│   └── apps/                   # Application Helm charts
-│       ├── argocd-apps/        # App-of-apps definitions (ArgoCD Applications)
-│       │   ├── templates/      # Individual app definitions
-│       │   └── secrets/        # SOPS encrypted secrets
-│       ├── kai-scheduler/      # KAI GPU Scheduler wrapper
-│       ├── minio/              # MinIO S3 storage
-│       │   ├── secrets/        # SOPS encrypted secrets
-│       │   └── .argoignore     # Excludes secrets from ArgoCD
-│       ├── lakefs/             # LakeFS data versioning
-│       │   ├── templates/      # PVC for persistence
-│       │   └── secrets/        # SOPS encrypted secrets
-│       ├── dagster/            # Dagster pipelines
-│       ├── jupyterhub/         # JupyterHub with Marimo
-│       ├── monitoring/         # Prometheus, Grafana, Loki
-│       ├── nvidia-nim/         # NIM LLM inference
-│       └── nvidia-safe-synth/  # Safe Synthesizer
-├── dagster/                    # Git submodule: github.com/aerugo/brev-dagster-pipelines
-│   ├── src/brev_pipelines/     # Dagster assets, resources, I/O managers
-│   └── .github/workflows/      # CI/CD for Docker image build
-├── docker/                     # Docker images
-│   └── jupyterhub-singleuser/  # Git submodule: github.com/aerugo/jupyterhub-singleuser
-├── scripts/                    # Automation scripts
-│   ├── setup-instance.sh       # Interactive setup (make setup)
-│   ├── bootstrap-rke2.sh       # RKE2 + NVIDIA installation
-│   ├── bootstrap-argocd.sh     # ArgoCD installation
-│   ├── setup-kubeconfig.sh     # Fetch kubeconfig from instance
-│   ├── create-secrets.sh       # SOPS secret generation
-│   └── apply-secrets.sh        # Apply secrets to cluster
-├── config/                     # Service configurations
-│   ├── nim/                    # NIM LLM config
-│   └── safe-synthesizer/       # Safe Synth config
-├── docs/                       # Documentation
-│   ├── plans/                  # Development plans
-│   └── invariants/             # Architectural constraints
-├── .sops.yaml                  # SOPS encryption config
-├── .env.example                # Environment template
-├── .env.local                  # Your credentials (git-ignored)
-└── Makefile                    # All commands
-```
-
----
-
-## Documentation
-
-- [Development Plan](docs/plans/active/grand_plan/development-plan.md) - Implementation roadmap
-- [Invariants](docs/invariants/INVARIANTS.md) - Architectural constraints
-- [Phase 3: Instance Setup](docs/plans/active/grand_plan/phases/phase-3.md) - Detailed setup guide
-
----
-
 ## Security
 
 - All secrets encrypted with SOPS + Age (committed to git safely)
@@ -621,4 +545,4 @@ brev-data-platform/
 
 ## License
 
-Proprietary - Internal Use Only
+MIT License - See [LICENSE](LICENSE) for details.
