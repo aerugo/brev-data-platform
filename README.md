@@ -168,8 +168,8 @@ kubectl get applications -n argocd
 | 7 | Monitoring | ✅ Complete | Prometheus, Grafana, Loki, DCGM Exporter |
 | 8 | Dagster | ✅ Complete | Pipeline orchestration with custom user code |
 | 8 | Marimo | ✅ Complete | Interactive notebooks |
-| 9 | NVIDIA NIM | 🔄 In Progress | Llama 3.1 8B - requires NGC secrets |
-| 9 | Safe Synthesizer | 🔄 In Progress | Scaled to 0 (single GPU constraint) |
+| 9 | NVIDIA NIM | ✅ Complete | Llama 3.1 8B Instruct - OpenAI-compatible API |
+| 9 | Safe Synthesizer | ✅ Complete | Scaled to 0 (single GPU constraint - NIM takes priority) |
 
 ---
 
