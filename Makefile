@@ -91,7 +91,7 @@ ssh-tunnel: ## Start SSH tunnel for kubectl access (runs in foreground)
 	@echo ""
 	@echo "Run $(YELLOW)make port-forward-all$(RESET) in another terminal to access services:"
 	@echo ""
-	@echo "$(GREEN)ArgoCD$(RESET)       https://localhost:8080"
+	@echo "$(GREEN)ArgoCD$(RESET)       http://localhost:8080"
 	@echo "             User: admin"
 	@echo "             Pass: $(YELLOW)make argocd-password$(RESET)"
 	@echo ""
@@ -139,7 +139,7 @@ ssh-tunnel-bg: ## Start SSH tunnel in background and show service info
 	MINIO_PASS=$$(kubectl -n minio get secret minio-credentials -o jsonpath="{.data.rootPassword}" 2>/dev/null | base64 -d 2>/dev/null || echo "N/A"); \
 	LAKEFS_KEY=$$(kubectl -n lakefs get secret lakefs-credentials -o jsonpath="{.data.access-key-id}" 2>/dev/null | base64 -d 2>/dev/null || echo "N/A"); \
 	LAKEFS_SECRET=$$(kubectl -n lakefs get secret lakefs-credentials -o jsonpath="{.data.secret-access-key}" 2>/dev/null | base64 -d 2>/dev/null || echo "N/A"); \
-	echo "$(GREEN)ArgoCD$(RESET)       https://localhost:8080"; \
+	echo "$(GREEN)ArgoCD$(RESET)       http://localhost:8080"; \
 	echo "             User: admin"; \
 	echo "             Pass: $$ARGOCD_PWD"; \
 	echo ""; \
@@ -179,52 +179,14 @@ apply-secrets: ## Apply encrypted secrets to cluster
 # Port Forwarding
 # =============================================================================
 
-port-forward-all: ## Forward all services (Ctrl+C to stop)
-	@echo "$(GREEN)Starting port forwards for all services...$(RESET)"
-	@echo ""
-	@ARGOCD_PWD=$$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" 2>/dev/null | base64 -d 2>/dev/null || echo "run 'make argocd-password'"); \
-	GRAFANA_PWD=$$(kubectl -n monitoring get secret monitoring-grafana -o jsonpath="{.data.admin-password}" 2>/dev/null | base64 -d 2>/dev/null || echo "run 'make grafana-password'"); \
-	echo "$(CYAN)Services:$(RESET)"; \
-	echo "  ArgoCD:      https://localhost:8080"; \
-	echo "               User: admin  Password: $$ARGOCD_PWD"; \
-	echo ""; \
-	echo "  JupyterHub:  http://localhost:8000"; \
-	echo "               User: any    Password: any"; \
-	echo ""; \
-	echo "  Dagster:     http://localhost:3000"; \
-	echo ""; \
-	echo "  LakeFS:      http://localhost:8001"; \
-	echo "               (credentials in .env.local)"; \
-	echo ""; \
-	echo "  MinIO:       http://localhost:9001"; \
-	echo "               (credentials in .env.local)"; \
-	echo ""; \
-	echo "  NIM API:     http://localhost:8002"; \
-	echo "               (OpenAI-compatible endpoint)"; \
-	echo ""; \
-	echo "  Grafana:     http://localhost:3001"; \
-	echo "               User: admin  Password: $$GRAFANA_PWD"; \
-	echo ""; \
-	echo "  Prometheus:  http://localhost:9090"; \
-	echo ""; \
-	echo "$(YELLOW)Press Ctrl+C to stop all port forwards$(RESET)"; \
-	echo ""; \
-	trap 'kill $$(jobs -p) 2>/dev/null' EXIT; \
-	kubectl port-forward svc/argocd-server -n argocd 8080:443 2>/dev/null & \
-	kubectl port-forward svc/proxy-public -n jupyterhub 8000:80 2>/dev/null & \
-	kubectl port-forward svc/dagster-webserver -n dagster 3000:3000 2>/dev/null & \
-	kubectl port-forward svc/lakefs -n lakefs 8001:8000 2>/dev/null & \
-	kubectl port-forward svc/minio-console -n minio 9001:9001 2>/dev/null & \
-	kubectl port-forward svc/nim-llm -n nvidia-ai 8002:8000 2>/dev/null & \
-	kubectl port-forward svc/monitoring-grafana -n monitoring 3001:80 2>/dev/null & \
-	kubectl port-forward svc/monitoring-kube-prometheus-prometheus -n monitoring 9090:9090 2>/dev/null & \
-	wait
+port-forward-all: ## Forward all services with SSH tunnel + health checks (Ctrl+C to stop)
+	@./scripts/port-forward-all.sh
 
 port-forward-argocd: ## Forward ArgoCD UI to localhost:8080
-	@echo "ArgoCD UI: https://localhost:8080"
+	@echo "ArgoCD UI: http://localhost:8080"
 	@echo "Username: admin"
 	@echo "Password: run 'make argocd-password'"
-	kubectl port-forward svc/argocd-server -n argocd 8080:443
+	kubectl port-forward svc/argocd-server -n argocd 8080:80
 
 port-forward-minio: ## Forward MinIO console to localhost:9001
 	@echo "MinIO Console: http://localhost:9001"
@@ -383,7 +345,7 @@ all-credentials: ## Show all service credentials
 	MINIO_PASS=$$(kubectl -n minio get secret minio-credentials -o jsonpath="{.data.rootPassword}" 2>/dev/null | base64 -d 2>/dev/null || echo "N/A"); \
 	LAKEFS_KEY=$$(kubectl -n lakefs get secret lakefs-credentials -o jsonpath="{.data.access-key-id}" 2>/dev/null | base64 -d 2>/dev/null || echo "N/A"); \
 	LAKEFS_SECRET=$$(kubectl -n lakefs get secret lakefs-credentials -o jsonpath="{.data.secret-access-key}" 2>/dev/null | base64 -d 2>/dev/null || echo "N/A"); \
-	echo "$(GREEN)ArgoCD$(RESET)       https://localhost:8080"; \
+	echo "$(GREEN)ArgoCD$(RESET)       http://localhost:8080"; \
 	echo "             User: admin"; \
 	echo "             Pass: $$ARGOCD_PWD"; \
 	echo ""; \

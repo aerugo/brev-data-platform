@@ -105,7 +105,7 @@ jupyterhub:
     storage:
       type: dynamic
       dynamic:
-        storageClass: ""  # Use cluster default
+        storageClass: local-path
       capacity: 10Gi
       homeMountPath: /home/jovyan
 
