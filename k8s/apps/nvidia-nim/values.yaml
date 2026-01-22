@@ -65,11 +65,11 @@ service:
   type: ClusterIP
   port: 8000
   # OpenAI-compatible endpoint at /v1/chat/completions
-  # Prometheus scraping annotations (metrics exposed at /metrics)
+  # Prometheus scraping annotations (metrics exposed at /v1/metrics per NVIDIA NIM docs)
   annotations:
     prometheus.io/scrape: "true"
     prometheus.io/port: "8000"
-    prometheus.io/path: "/metrics"
+    prometheus.io/path: "/v1/metrics"
 
 # Observability configuration
 observability:

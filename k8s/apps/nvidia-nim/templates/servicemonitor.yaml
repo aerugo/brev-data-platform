@@ -19,7 +19,7 @@ spec:
       - {{ .Release.Namespace }}
   endpoints:
     - port: http
-      path: /metrics
+      path: /v1/metrics
       interval: {{ .Values.observability.serviceMonitor.interval }}
       scrapeTimeout: 10s
 {{- end }}
