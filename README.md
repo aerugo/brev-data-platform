@@ -165,7 +165,7 @@ kubectl get applications -n argocd
 | 5 | ArgoCD | ✅ Complete | GitOps with app-of-apps pattern |
 | 6 | MinIO | ✅ Complete | 50Gi persistent storage |
 | 6 | LakeFS | ✅ Complete | 10Gi persistent storage |
-| 7 | Monitoring | 🔲 Pending | Prometheus/Grafana/Loki |
+| 7 | Monitoring | ✅ Complete | Prometheus, Grafana, Loki, DCGM Exporter |
 | 8 | Dagster | 🔲 Pending | Pipeline orchestration |
 | 8 | Marimo | 🔲 Pending | Notebooks |
 | 9 | NVIDIA NIM | 🔲 Pending | LLM inference |
