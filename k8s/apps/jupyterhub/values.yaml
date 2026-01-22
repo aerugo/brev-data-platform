@@ -141,6 +141,16 @@ jupyterhub:
           secretKeyRef:
             name: jupyterhub-env-secrets
             key: LAKEFS_SECRET_ACCESS_KEY
+      # Weaviate connection for vector search dashboards
+      WEAVIATE_HOST:
+        value: "weaviate.weaviate.svc.cluster.local"
+      WEAVIATE_PORT:
+        value: "8080"
+      WEAVIATE_GRPC_PORT:
+        value: "50051"
+      # NIM Embedding service for generating query embeddings
+      NIM_EMBEDDING_ENDPOINT:
+        value: "http://nvidia-nim-embedding.nvidia-nim.svc.cluster.local:8000"
 
     # Profile list - users choose at spawn time
     profileList:
@@ -167,7 +177,7 @@ jupyterhub:
     networkPolicy:
       enabled: true
       egress:
-        # Allow access to all cluster services (NIM LLM, MinIO, LakeFS, etc.)
+        # Allow access to all cluster services (NIM LLM, MinIO, LakeFS, Weaviate, etc.)
         - to:
             - namespaceSelector: {}  # All namespaces in cluster
           ports:
@@ -176,6 +186,10 @@ jupyterhub:
             - port: 9000  # MinIO API
               protocol: TCP
             - port: 9001  # MinIO Console
+              protocol: TCP
+            - port: 8080  # Weaviate HTTP
+              protocol: TCP
+            - port: 50051 # Weaviate gRPC
               protocol: TCP
 
   # ==========================================================================
