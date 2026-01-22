@@ -205,6 +205,44 @@ echo "NVIDIA Device Plugin installed!"
 echo ""
 
 # =============================================================================
+# Step 5b: Configure GPU Time-Slicing for sharing
+# =============================================================================
+echo "=== Step 5b: Configuring GPU Time-Slicing ==="
+
+# Create time-slicing config (allows 4 pods to share each GPU)
+kubectl apply -f - <<EOF
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nvidia-device-plugin-config
+  namespace: kube-system
+data:
+  config.yaml: |
+    version: v1
+    sharing:
+      timeSlicing:
+        renameByDefault: false
+        failRequestsGreaterThanOne: false
+        resources:
+          - name: nvidia.com/gpu
+            replicas: 4
+EOF
+
+# Patch device plugin to use the config
+kubectl patch daemonset nvidia-device-plugin-daemonset -n kube-system --type='json' -p='[
+  {"op": "add", "path": "/spec/template/spec/containers/0/args", "value": ["--config-file=/etc/nvidia/config.yaml"]},
+  {"op": "add", "path": "/spec/template/spec/containers/0/volumeMounts/-", "value": {"name": "nvidia-config", "mountPath": "/etc/nvidia"}},
+  {"op": "add", "path": "/spec/template/spec/volumes/-", "value": {"name": "nvidia-config", "configMap": {"name": "nvidia-device-plugin-config", "items": [{"key": "config.yaml", "path": "config.yaml"}]}}}
+]'
+
+# Wait for device plugin to restart
+echo "Waiting for device plugin to restart with time-slicing config..."
+kubectl rollout status daemonset nvidia-device-plugin-daemonset -n kube-system --timeout=60s
+
+echo "GPU Time-Slicing configured (4 replicas per GPU)!"
+echo ""
+
+# =============================================================================
 # Step 6: Create RuntimeClass for NVIDIA
 # =============================================================================
 echo "=== Step 6: Creating NVIDIA RuntimeClass ==="

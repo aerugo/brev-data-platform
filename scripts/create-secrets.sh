@@ -176,6 +176,30 @@ sops --config /dev/null --age "$AGE_PUBLIC_KEY" -e "$TEMP_DIR/dagster-secrets.ya
 echo "  ✓ k8s/apps/dagster/secrets/secrets.enc.yaml"
 
 # -----------------------------------------------------------------------------
+# JupyterHub secrets (for user notebook environment)
+# -----------------------------------------------------------------------------
+echo "Creating JupyterHub secrets..."
+cat > "$TEMP_DIR/jupyterhub-secrets.yaml" <<EOF
+apiVersion: v1
+kind: Secret
+metadata:
+  name: jupyterhub-env-secrets
+  namespace: jupyterhub
+type: Opaque
+stringData:
+  MINIO_ENDPOINT: "http://minio.minio.svc.cluster.local:9000"
+  MINIO_ACCESS_KEY: "${MINIO_ROOT_USER}"
+  MINIO_SECRET_KEY: "${MINIO_ROOT_PASSWORD}"
+  LAKEFS_ENDPOINT: "http://lakefs.lakefs.svc.cluster.local:8000"
+  LAKEFS_ACCESS_KEY_ID: "${LAKEFS_ACCESS_KEY_ID}"
+  LAKEFS_SECRET_ACCESS_KEY: "${LAKEFS_SECRET_ACCESS_KEY}"
+EOF
+
+mkdir -p k8s/apps/jupyterhub/secrets
+sops --config /dev/null --age "$AGE_PUBLIC_KEY" -e "$TEMP_DIR/jupyterhub-secrets.yaml" > k8s/apps/jupyterhub/secrets/secrets.enc.yaml
+echo "  ✓ k8s/apps/jupyterhub/secrets/secrets.enc.yaml"
+
+# -----------------------------------------------------------------------------
 # Marimo secrets (same access as Dagster)
 # -----------------------------------------------------------------------------
 echo "Creating Marimo secrets..."

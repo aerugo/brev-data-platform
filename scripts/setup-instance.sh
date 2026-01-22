@@ -545,6 +545,17 @@ if [ "$HAS_CREDENTIALS" = "true" ]; then
         --from-literal=NGC_API_KEY="${NGC_API_KEY:-}" \
         --dry-run=client -o yaml | kubectl apply -f -
 
+    # JupyterHub secrets (for user notebook environment)
+    echo "  Creating JupyterHub secrets..."
+    kubectl create secret generic jupyterhub-env-secrets -n jupyterhub \
+        --from-literal=MINIO_ENDPOINT="http://minio.minio.svc.cluster.local:9000" \
+        --from-literal=MINIO_ACCESS_KEY="$MINIO_ROOT_USER" \
+        --from-literal=MINIO_SECRET_KEY="$MINIO_ROOT_PASSWORD" \
+        --from-literal=LAKEFS_ENDPOINT="http://lakefs.lakefs.svc.cluster.local:8000" \
+        --from-literal=LAKEFS_ACCESS_KEY_ID="${LAKEFS_ACCESS_KEY_ID:-admin}" \
+        --from-literal=LAKEFS_SECRET_ACCESS_KEY="${LAKEFS_SECRET_ACCESS_KEY:-}" \
+        --dry-run=client -o yaml | kubectl apply -f -
+
     # ArgoCD repo credentials (if GitHub PAT provided)
     if [ -n "$GITHUB_PAT" ]; then
         echo "  Creating ArgoCD repo credentials..."
