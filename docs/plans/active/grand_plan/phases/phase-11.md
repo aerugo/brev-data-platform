@@ -8,7 +8,12 @@
 
 ## Objective
 
-Validate the entire platform by running the demo pipeline from the `brev-dagster-pipelines` repository. Verify all integrations work: Dagster orchestration, MinIO storage, LakeFS versioning, NIM LLM enrichment, and JupyterHub notebook access.
+Validate the entire platform by running programmatic validation tests that verify all integrations work: Dagster orchestration, MinIO storage, LakeFS versioning, NIM LLM inference, and JupyterHub notebook access.
+
+This phase provides **three levels of validation**:
+1. **Quick** - Kubernetes cluster and pod health check
+2. **Full** - Above + ArgoCD apps + Dagster validation pipeline
+3. **Dagster Assets** - Comprehensive component tests via `validate_platform` asset
 
 ---
 
@@ -16,162 +21,165 @@ Validate the entire platform by running the demo pipeline from the `brev-dagster
 
 - Phase 10.1 complete (Dagster pipelines repo set up, image deployed)
 - All services running and healthy in cluster
-- Port forwarding available via `make port-forward-all`
+- SSH tunnel active: `make ssh-tunnel`
+- KUBECONFIG set: `export KUBECONFIG=~/.kube/config-brev-data-platform-dev`
 
 ---
 
-## Invariants Enforced in This Phase
+## Validation Methods
 
-- **INV-P001**: Assets over ops - Pipeline uses `@asset` pattern
-- **INV-P003**: Type annotations on assets - Full type hints
-- **INV-D002**: LakeFS for data versioning - Data stored via LakeFS
-- **INV-D003**: Parquet/JSON for structured data - Standard formats
+### Method 1: CLI Validation Script (Recommended)
 
----
-
-## Demo Pipeline Overview
-
-The demo pipeline from `brev-dagster-pipelines` demonstrates the full stack:
-
-```
-┌─────────────────────┐
-│   raw_sample_data   │  ← Generate 100 sample customer records
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│    cleaned_data     │  ← Clean, normalize, add tier classification
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│  nim_enriched_data  │  ← NIM LLM generates customer profiles (10 samples)
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│    data_summary     │  ← Statistics stored to MinIO
-└─────────────────────┘
-
-┌─────────────────────┐
-│   platform_health   │  ← Health check for MinIO, LakeFS, NIM
-└─────────────────────┘
-```
-
----
-
-## Validation Steps
-
-### Step 11.1: Verify Dagster Deployment
+Run comprehensive validation from the command line:
 
 ```bash
-# Check Dagster pods are running
-kubectl get pods -n dagster
+# Full validation (recommended)
+make validate-platform
+
+# Quick health check (K8s cluster + pods only)
+make validate-quick
+
+# Kubernetes validation (no Dagster tests)
+make validate-k8s
+```
+
+**What `make validate-platform` tests:**
+- Kubernetes node health
+- GPU resource availability
+- KAI Scheduler status
+- Pod status in all namespaces (argocd, minio, lakefs, dagster, jupyterhub, nvidia-nim, monitoring)
+- ArgoCD application sync status
+- Dagster webserver/daemon/user-code health
+- Service connectivity (MinIO, LakeFS, NIM)
+- Dagster `quick_health_check` asset execution
+
+### Method 2: Dagster Validation Assets
+
+Run validation directly through Dagster UI or CLI:
+
+```bash
+# Via Dagster CLI (requires env vars)
+dagster asset materialize -m brev_pipelines.definitions --select validate_platform
+```
+
+**Or via Dagster UI:**
+1. Open Dagster: `make port-forward-dagster` → http://localhost:3000
+2. Navigate to **Assets** → **validation** group
+3. Materialize `validate_platform`
+
+**Available Validation Assets:**
+
+| Asset | Description | Tests |
+|-------|-------------|-------|
+| `validate_minio` | MinIO object storage | Connection, list/create/delete buckets, read/write objects |
+| `validate_lakefs` | LakeFS versioning | Connection, list repositories, API health |
+| `validate_nim` | NVIDIA NIM LLM | Health check, text completion, response quality |
+| `validate_platform` | Full validation | Aggregates all above, stores report to MinIO |
+| `quick_health_check` | Quick connectivity | Lightweight health check of all services |
+
+### Method 3: Manual Validation
+
+Step-by-step manual validation for troubleshooting.
+
+---
+
+## Detailed Validation Steps
+
+### Step 11.1: Quick Cluster Health
+
+```bash
+# Quick validation
+make validate-quick
 
 # Expected output:
-# NAME                                    READY   STATUS    RESTARTS   AGE
-# dagster-daemon-xxx                      1/1     Running   0          ...
-# dagster-webserver-xxx                   1/1     Running   0          ...
-# brev-pipelines-xxx                      1/1     Running   0          ...
-# dagster-postgresql-0                    1/1     Running   0          ...
-
-# Check user code logs for import errors
-kubectl logs -l app.kubernetes.io/name=dagster-user-deployments -n dagster --tail=50
+# ✓ Node is Ready
+# ✓ GPU available: 1
+# ✓ KAI Scheduler running (7 pods)
+# ✓ argocd: 5/5 pods running
+# ✓ minio: 1/1 pods running
+# ...
 ```
 
-### Step 11.2: Access Dagster UI
+### Step 11.2: Full Platform Validation
 
 ```bash
-# Start all port forwards
-make port-forward-all
+# Full validation
+make validate-platform
 
-# Open Dagster UI
-open http://localhost:3000
+# This runs:
+# 1. Kubernetes cluster health
+# 2. Pod status for all namespaces
+# 3. ArgoCD application sync status
+# 4. Dagster deployment checks
+# 5. Service health via Dagster quick_health_check
 ```
 
-**Verify in UI:**
-- Navigate to **Assets** tab
-- Confirm you see **demo** group with assets:
-  - `raw_sample_data`
-  - `cleaned_data`
-  - `nim_enriched_data`
-  - `data_summary`
-- Confirm you see **health** group with:
-  - `platform_health`
+### Step 11.3: Dagster Asset Validation
 
-### Step 11.3: Run Platform Health Check
+**Via UI:**
+1. Open http://localhost:3000 (after `make port-forward-dagster`)
+2. Navigate to **Assets** tab
+3. Select **validation** group
+4. Click `validate_platform` → **Materialize**
+5. Wait for completion (~30 seconds)
+6. View results in the materialization panel
 
-1. In Dagster UI, click on `platform_health` asset
-2. Click **Materialize**
-3. Wait for completion
-4. Click on the materialization to view the result
-
-**Expected result:**
+**Expected Result:**
 ```json
 {
-  "minio": "healthy",
-  "lakefs": "healthy (1 repos)" or similar,
-  "nim": "healthy"
+  "validation_run": {
+    "timestamp": "2026-01-22T12:00:00Z",
+    "overall_status": "PASSED",
+    "passed_components": 3,
+    "total_components": 3
+  },
+  "summary": {
+    "minio": "✅ PASSED",
+    "lakefs": "✅ PASSED",
+    "nim": "✅ PASSED"
+  },
+  "report_location": "data-products/validation/report_20260122_120000.json"
 }
 ```
 
-If any service shows "error", troubleshoot that service before proceeding.
-
 ### Step 11.4: Run Demo Pipeline
 
+After validation passes, run the demo pipeline:
+
 1. In Dagster UI, navigate to **Assets** → **demo** group
-2. Select `raw_sample_data` asset
+2. Select `raw_sample_data`
 3. Click **Materialize**
-4. Watch the pipeline execute through downstream assets automatically
+4. Watch downstream assets execute automatically
 
-**Alternative: Materialize all at once**
-1. Select all 4 demo assets
-2. Click **Materialize selected**
-
-### Step 11.5: Verify Pipeline Results
-
-**Check Dagster logs:**
-```bash
-kubectl logs -l app.kubernetes.io/name=dagster-user-deployments -n dagster --tail=100 | grep -E "(Generated|Cleaned|Calling NIM|Enriched|Stored)"
+**Pipeline Flow:**
+```
+raw_sample_data (100 records)
+        ↓
+cleaned_data (normalized, tier added)
+        ↓
+nim_enriched_data (10 AI-generated profiles)
+        ↓
+data_summary (stored to MinIO)
 ```
 
-**Expected log entries:**
-- "Generated 100 sample records"
-- "Cleaned 100 records"
-- "Calling NIM for CUST-XXXX..." (10 times)
-- "Enriched X/100 records"
-- "Stored summary to data-products/demo/summary.json"
-
-### Step 11.6: Verify MinIO Storage
+### Step 11.5: Verify MinIO Output
 
 ```bash
-# Port forward MinIO console
+# Open MinIO console
 make port-forward-minio
+# http://localhost:9001
 
-# Open MinIO UI
-open http://localhost:9001
+# Or via validation report
+# Check: data-products/validation/latest.json
+# Check: data-products/demo/summary.json
 ```
 
-**Login and verify:**
-1. Login with credentials from `.env.local`
-2. Navigate to **data-products** bucket
-3. Browse to **demo/** folder
-4. Verify `summary.json` exists
-5. Download and inspect the file
-
-**Or via CLI:**
-```bash
-# If mc (MinIO client) is configured
-mc ls minio/data-products/demo/
-mc cat minio/data-products/demo/summary.json
-```
-
-### Step 11.7: Test from JupyterHub
+### Step 11.6: Test from JupyterHub
 
 1. Open JupyterHub: `make port-forward-jupyterhub` → http://localhost:8000
 2. Login with any username/password
 3. Start a **Standard (CPU only)** server
-4. Open a Python notebook or terminal
+4. Create a new Python notebook
 
 **Test MinIO connectivity:**
 ```python
@@ -187,145 +195,130 @@ client = Minio(
     secure=False,
 )
 
-# List buckets
-print("Buckets:")
-for bucket in client.list_buckets():
-    print(f"  - {bucket.name}")
+# Read validation report
+response = client.get_object("data-products", "validation/latest.json")
+report = json.loads(response.read())
+print("Validation Report:")
+print(json.dumps(report, indent=2))
 
-# Read the demo output
+# Read demo output
 response = client.get_object("data-products", "demo/summary.json")
 summary = json.loads(response.read())
-print("\nPipeline Summary:")
+print("\nDemo Pipeline Summary:")
 print(json.dumps(summary, indent=2))
-```
-
-**Test with Marimo:**
-1. In JupyterHub, open the Marimo launcher
-2. Create a new Marimo notebook
-3. Run the same MinIO connectivity test
-4. Verify reactive updates work
-
-### Step 11.8: Verify NIM Enrichment
-
-Check that AI-generated profiles are meaningful:
-
-1. In Dagster UI, click on `nim_enriched_data` materialization
-2. View the logs to see generated profiles
-3. Profiles should be coherent customer descriptions, not error messages
-
-**Example valid profile:**
-```
-"A 45-year-old customer from the North region in the Premium category, representing a High Value tier with significant spending history."
-```
-
-**Example error (indicates NIM issue):**
-```
-"LLM error: Connection refused"
 ```
 
 ---
 
-## Full Stack Health Check Script
+## Validation Asset Details
 
-Run this script to validate all components:
+### validate_minio
 
-```bash
-#!/bin/bash
-set -e
+Tests MinIO S3-compatible storage with 7 comprehensive tests:
 
-echo "=== Brev Data Platform - Full Stack Validation ==="
-echo ""
+1. **Connection** - Can connect to MinIO endpoint
+2. **List buckets** - Can enumerate existing buckets
+3. **Create bucket** - Can create `validation-test-bucket`
+4. **Write object** - Can write JSON data to bucket
+5. **Read object** - Can read data back and verify integrity
+6. **Delete object** - Can delete test object
+7. **Delete bucket** - Can cleanup test bucket
 
-echo "1. Kubernetes Cluster:"
-kubectl get nodes -o wide
-echo ""
+### validate_lakefs
 
-echo "2. GPU Status:"
-kubectl describe nodes | grep -A2 "nvidia.com/gpu" || echo "No GPU info found"
-echo ""
+Tests LakeFS data versioning:
 
-echo "3. ArgoCD Applications:"
-kubectl get applications -n argocd \
-  -o custom-columns=NAME:.metadata.name,SYNC:.status.sync.status,HEALTH:.status.health.status
-echo ""
+1. **Connection** - Health endpoint responds
+2. **List repositories** - Can enumerate repositories
+3. **API version** - API is accessible
 
-echo "4. All Pods Status:"
-for ns in argocd minio lakefs dagster jupyterhub nvidia-nim monitoring; do
-  echo "--- $ns ---"
-  kubectl get pods -n $ns --no-headers 2>/dev/null || echo "Namespace not found"
-done
-echo ""
+### validate_nim
 
-echo "5. Service Endpoints (internal):"
-echo "   MinIO:      minio.minio.svc.cluster.local:9000"
-echo "   LakeFS:     lakefs.lakefs.svc.cluster.local:8000"
-echo "   Dagster:    dagster-webserver.dagster.svc.cluster.local:80"
-echo "   NIM:        nvidia-nim-llm.nvidia-nim.svc.cluster.local:8000"
-echo "   JupyterHub: proxy-public.jupyterhub.svc.cluster.local:80"
-echo ""
+Tests NVIDIA NIM LLM inference:
 
-echo "6. Dagster User Code:"
-kubectl get pods -n dagster -l app.kubernetes.io/name=dagster-user-deployments -o wide
-echo ""
+1. **Health check** - `/v1/health/ready` responds
+2. **Simple completion** - Can generate text from prompt
+3. **Structured response** - Can produce semi-structured output
 
-echo "7. Recent Dagster Runs:"
-kubectl logs -n dagster -l app.kubernetes.io/name=dagster-webserver --tail=20 2>/dev/null | grep -i "run" | tail -5 || echo "No recent runs"
-echo ""
+### validate_platform
 
-echo "=== Validation Complete ==="
-```
+Aggregates all component validations:
+- Runs all individual validation assets
+- Calculates overall pass/fail status
+- Stores timestamped report to MinIO (`data-products/validation/`)
+- Updates `validation/latest.json` for easy access
 
 ---
 
 ## Troubleshooting
 
-### Dagster can't connect to MinIO
+### Validation script fails to connect
 
 ```bash
-# Check secret exists in dagster namespace
-kubectl get secret dagster-env-secrets -n dagster
+# Ensure SSH tunnel is running
+make ssh-tunnel
 
-# If missing, create from minio namespace
-kubectl get secret minio-credentials -n minio -o yaml | \
-  sed 's/namespace: minio/namespace: dagster/' | \
-  sed 's/name: minio-credentials/name: dagster-env-secrets/' | \
-  kubectl apply -f -
+# In another terminal, set KUBECONFIG
+export KUBECONFIG=~/.kube/config-brev-data-platform-dev
+
+# Test connection
+kubectl get nodes
 ```
 
-### NIM returns errors
+### MinIO validation fails
+
+```bash
+# Check MinIO pods
+kubectl get pods -n minio
+
+# Check MinIO logs
+kubectl logs -f deployment/minio -n minio
+
+# Verify secrets exist
+kubectl get secret minio-credentials -n minio
+kubectl get secret dagster-env-secrets -n dagster
+```
+
+### LakeFS validation fails
+
+```bash
+# Check LakeFS pods
+kubectl get pods -n lakefs
+
+# Check LakeFS logs
+kubectl logs -f deployment/lakefs -n lakefs
+
+# Verify MinIO credentials for LakeFS
+kubectl get secret minio-credentials -n lakefs
+```
+
+### NIM validation fails
+
+NIM may take several minutes to become ready (model loading):
 
 ```bash
 # Check NIM pod status
 kubectl get pods -n nvidia-nim
 
-# Check NIM logs
-kubectl logs -f deployment/nvidia-nim-llm -n nvidia-nim --tail=50
+# Watch NIM logs for model loading
+kubectl logs -f deployment/nvidia-nim-llm -n nvidia-nim
 
-# Test NIM directly
+# Test health endpoint directly
 kubectl port-forward svc/nvidia-nim-llm -n nvidia-nim 8000:8000 &
 curl http://localhost:8000/v1/health/ready
 ```
 
-### Assets not visible in Dagster UI
+### Dagster validation asset fails
 
 ```bash
-# Check user code container logs
-kubectl logs -l app.kubernetes.io/name=dagster-user-deployments -n dagster
+# Check Dagster user code logs
+kubectl logs -l app.kubernetes.io/name=dagster-user-deployments -n dagster --tail=100
 
-# Look for import errors like:
-# "ModuleNotFoundError: No module named 'brev_pipelines'"
+# Look for import errors
+kubectl logs -l app.kubernetes.io/name=dagster-user-deployments -n dagster | grep -i error
 
-# If image is wrong, check the deployment
-kubectl get deployment -n dagster -o yaml | grep image:
-```
-
-### JupyterHub environment variables missing
-
-```bash
-# Check if secrets are mounted in singleuser pods
-kubectl exec -it <singleuser-pod> -n jupyterhub -- env | grep MINIO
-
-# If missing, check JupyterHub values.yaml envFromSecret configuration
+# Check environment variables are set
+kubectl exec -it $(kubectl get pods -n dagster -l app.kubernetes.io/name=dagster-user-deployments -o jsonpath='{.items[0].metadata.name}') -n dagster -- env | grep -E "MINIO|LAKEFS|NIM"
 ```
 
 ---
@@ -333,33 +326,30 @@ kubectl exec -it <singleuser-pod> -n jupyterhub -- env | grep MINIO
 ## Completion Criteria
 
 ### Infrastructure
+- [ ] `make validate-quick` passes all checks
 - [ ] All ArgoCD applications show Synced/Healthy
-- [ ] All pods in all namespaces are Running
-- [ ] GPU is available (visible in node resources)
+- [ ] GPU is visible in node resources
 
-### Dagster
-- [ ] Dagster webserver accessible at http://localhost:3000
-- [ ] User code deployment running with custom image
-- [ ] All demo assets visible in UI
-- [ ] `platform_health` shows all services healthy
+### Dagster Validation
+- [ ] `validate_minio` asset: All 7 tests pass
+- [ ] `validate_lakefs` asset: All tests pass
+- [ ] `validate_nim` asset: Health and completion tests pass
+- [ ] `validate_platform` asset: Overall status PASSED
 
 ### Demo Pipeline
 - [ ] `raw_sample_data` materializes (100 records)
 - [ ] `cleaned_data` materializes (100 records with tier)
-- [ ] `nim_enriched_data` materializes with actual AI profiles (10 enriched)
-- [ ] `data_summary` materializes and stores to MinIO
-- [ ] `summary.json` exists in MinIO `data-products/demo/`
+- [ ] `nim_enriched_data` materializes (10 AI profiles)
+- [ ] `data_summary` stored to MinIO
 
 ### JupyterHub
-- [ ] JupyterHub accessible at http://localhost:8000
 - [ ] Can spawn Standard server
-- [ ] Environment variables (MINIO_*, LAKEFS_*) are set
-- [ ] Can read pipeline output from MinIO in notebook
-- [ ] Marimo works in JupyterHub
+- [ ] Environment variables are set
+- [ ] Can read MinIO data from notebook
 
-### End-to-End
-- [ ] Full stack health check script passes
-- [ ] Data flows from Dagster → MinIO → JupyterHub
+### Validation Report
+- [ ] Report stored at `data-products/validation/latest.json`
+- [ ] Report shows all components passed
 
 ---
 
@@ -367,33 +357,46 @@ kubectl exec -it <singleuser-pod> -n jupyterhub -- env | grep MINIO
 
 Once all criteria are met:
 
-1. Update this file's status to **Complete**
-2. Update `development-plan.md` status table
-3. Commit completion:
-   ```bash
-   git add docs/plans/active/grand_plan/phases/phase-11.md
-   git add docs/plans/active/grand_plan/development-plan.md
-   git commit -m "Complete Phase 11: Sample Pipeline & Validation - Platform fully operational"
-   git push origin main
-   ```
+```bash
+# 1. Update submodule to latest
+cd /path/to/brev-data-platform
+git submodule update --remote dagster
+
+# 2. Update this file's status
+# Edit phase-11.md: Status: Complete, Started: date, Completed: date
+
+# 3. Update development-plan.md progress table
+
+# 4. Commit
+git add -A
+git commit -m "Complete Phase 11: Platform validation - All systems operational
+
+- All validation assets passing
+- Demo pipeline runs successfully
+- JupyterHub access verified
+- Validation report stored to MinIO
+
+Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>"
+git push origin main
+```
 
 ---
 
-## Congratulations!
+## Summary
 
-The Brev Data Platform is now fully deployed and validated. You have:
+The Brev Data Platform is fully deployed and validated:
 
-| Component | Status | Description |
-|-----------|--------|-------------|
-| **Infrastructure** | ✅ | GPU-enabled RKE2 cluster on Brev |
-| **GitOps** | ✅ | ArgoCD managing all applications |
-| **Storage** | ✅ | MinIO S3-compatible object storage |
-| **Versioning** | ✅ | LakeFS for data versioning |
-| **Orchestration** | ✅ | Dagster running data pipelines |
-| **Notebooks** | ✅ | JupyterHub with Marimo extension |
-| **AI/LLM** | ✅ | NVIDIA NIM for LLM inference |
-| **Monitoring** | ✅ | Prometheus, Grafana, Loki |
-| **CI/CD** | ✅ | GitHub Actions for automation |
+| Component | Validation Method | Status |
+|-----------|-------------------|--------|
+| **RKE2 Cluster** | `make validate-quick` | |
+| **KAI Scheduler** | Pod health check | |
+| **ArgoCD** | App sync status | |
+| **MinIO** | `validate_minio` asset (7 tests) | |
+| **LakeFS** | `validate_lakefs` asset (3 tests) | |
+| **NIM LLM** | `validate_nim` asset (3 tests) | |
+| **Dagster** | User code deployment + demo pipeline | |
+| **JupyterHub** | Notebook MinIO access test | |
+| **Monitoring** | Pod health check | |
 
 ---
 
@@ -405,8 +408,8 @@ The Brev Data Platform is now fully deployed and validated. You have:
 3. **Create Grafana dashboards** - Visualize pipeline metrics and GPU usage
 
 ### Future Enhancements
-- **LakeFS integration** - Add branching/versioning to pipeline outputs
-- **Safe Synthesizer** - Integrate when GPU allows (currently NIM uses the GPU)
-- **Data quality** - Add Great Expectations or similar validation
-- **Alerting** - Configure PagerDuty/Slack alerts for pipeline failures
+- **LakeFS branching** - Add data versioning to pipeline outputs
+- **Safe Synthesizer** - Integrate when GPU allows (NIM uses GPU)
+- **Data quality** - Add Great Expectations validation
+- **Alerting** - Configure alerts for pipeline failures
 - **Multi-environment** - Add staging/production configurations

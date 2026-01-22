@@ -5,6 +5,7 @@
         port-forward-dagster port-forward-jupyterhub port-forward-nim \
         port-forward-grafana port-forward-prometheus port-forward-loki \
         encrypt decrypt edit-secret create-secrets lint validate \
+        validate-platform validate-quick validate-k8s \
         build-dagster dagster-dev dagster-test \
         bootstrap-argocd argocd-password grafana-password \
         down destroy full-setup
@@ -211,6 +212,15 @@ create-secrets: ## Create all encrypted secrets from .env.local
 # =============================================================================
 # Validation
 # =============================================================================
+
+validate-platform: ## Run full platform validation (K8s, pods, services, Dagster)
+	@./scripts/validate-platform.sh
+
+validate-quick: ## Quick health check (K8s cluster and pods only)
+	@./scripts/validate-platform.sh --quick
+
+validate-k8s: ## Kubernetes validation only (no Dagster tests)
+	@./scripts/validate-platform.sh --k8s
 
 lint: ## Lint all code (Helm, Python)
 	@echo "=== Linting Helm charts ==="

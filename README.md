@@ -283,6 +283,11 @@ make port-forward-minio      # http://localhost:9001
 make port-forward-nim        # http://localhost:8002
 make port-forward-grafana    # http://localhost:3001
 
+# Validation
+make validate-platform       # Full platform validation (recommended)
+make validate-quick          # Quick K8s health check
+make validate-k8s            # K8s validation only (no Dagster)
+
 # Secrets
 make create-secrets          # Generate encrypted secrets from .env.local
 make edit-secret FILE=...    # Edit encrypted secret in place
