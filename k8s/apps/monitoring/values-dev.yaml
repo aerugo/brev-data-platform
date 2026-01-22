@@ -32,16 +32,25 @@ kube-prometheus-stack:
           memory: 2Gi
 
 loki:
+  # Use small persistence in dev (Loki requires writable storage)
   singleBinary:
     persistence:
-      enabled: false  # Use emptyDir for dev
+      enabled: true
+      size: 5Gi
+      storageClass: local-path
     resources:
       requests:
         cpu: 50m
-        memory: 128Mi
+        memory: 256Mi
       limits:
-        cpu: 200m
+        cpu: 500m
         memory: 512Mi
+  # Configure storage paths
+  loki:
+    storage:
+      filesystem:
+        chunks_directory: /var/loki/chunks
+        rules_directory: /var/loki/rules
 
 promtail:
   resources:
@@ -55,8 +64,8 @@ promtail:
 dcgmExporter:
   resources:
     requests:
-      cpu: 50m
-      memory: 64Mi
-    limits:
-      cpu: 200m
+      cpu: 100m
       memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
