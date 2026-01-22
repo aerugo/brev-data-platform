@@ -148,15 +148,15 @@ jupyterhub:
         description: "2 CPU cores, 4GB RAM - for data analysis and light workloads"
         default: true
 
-      - display_name: "GPU Server (1x NVIDIA GPU)"
-        description: "2 CPU cores, 8GB RAM, 1x NVIDIA GPU - for ML/AI workloads"
+      - display_name: "GPU Server (40GB VRAM)"
+        description: "2 CPU cores, 8GB RAM, 40GB GPU VRAM - for ML/AI workloads (shared via KAI Scheduler)"
         kubespawner_override:
           mem_guarantee: 4G
           mem_limit: 8G
-          extra_resource_limits:
-            nvidia.com/gpu: "1"
-          extra_resource_guarantees:
-            nvidia.com/gpu: "1"
+          # Use KAI Scheduler annotations for fractional GPU allocation
+          # This allows sharing the A100 80GB with NIM LLM
+          extra_annotations:
+            kai.scheduler.nvidia.com/gpu-memory: "40Gi"
 
   # ==========================================================================
   # Scheduling - Disable default user-scheduler (use KAI instead)

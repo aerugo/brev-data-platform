@@ -28,18 +28,17 @@ imagePullSecrets:
 
 replicaCount: 1
 
-# GPU resources for H200 (141GB VRAM)
-# GPT-OSS 120B uses ~80GB with MXFP4 quantization
-# Reduced CPU to fit cluster constraints (12 cores total, ~4 used by system)
+# GPU resources - using KAI Scheduler fractional GPU allocation
+# Llama 3.1 8B needs ~20GB VRAM, allocating 40GB for headroom
+# This allows sharing the A100 80GB with other workloads (e.g., JupyterHub GPU notebooks)
 resources:
   requests:
     memory: 32Gi
     cpu: 4
-    nvidia.com/gpu: 1
   limits:
     memory: 64Gi
     cpu: 8
-    nvidia.com/gpu: 1
+  # Note: GPU allocation handled by KAI Scheduler annotations below
 
 # Use NVIDIA RuntimeClass (created by bootstrap-rke2.sh)
 runtimeClassName: nvidia
@@ -47,6 +46,11 @@ runtimeClassName: nvidia
 # KAI Scheduler for GPU workloads (Phase 3.5)
 # Enables fractional GPU, gang scheduling, and topology-aware placement
 schedulerName: kai-scheduler
+
+# KAI Scheduler annotations for fractional GPU allocation
+# Requests 40GB of GPU memory instead of a whole GPU
+podAnnotations:
+  kai.scheduler.nvidia.com/gpu-memory: "40Gi"
 
 # Tolerations for GPU nodes
 tolerations:
