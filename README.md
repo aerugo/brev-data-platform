@@ -23,6 +23,23 @@ This repository contains Infrastructure as Code (IaC) for deploying a complete d
 
 ## Quick Start
 
+### Step 0: Clone Repository with Submodules
+
+```bash
+# Clone with all submodules
+git clone --recurse-submodules https://github.com/aerugo/brev-data-platform.git
+cd brev-data-platform
+
+# Or if already cloned without submodules:
+git submodule update --init --recursive
+```
+
+**Submodules included:**
+| Submodule | Path | Description |
+|-----------|------|-------------|
+| [brev-dagster-pipelines](https://github.com/aerugo/brev-dagster-pipelines) | `dagster/` | Dagster pipeline code (assets, resources, I/O managers) |
+| [jupyterhub-singleuser](https://github.com/aerugo/jupyterhub-singleuser) | `docker/jupyterhub-singleuser/` | Custom JupyterHub singleuser image |
+
 ### Step 1: Install Required Tools
 
 ```bash
@@ -546,12 +563,11 @@ brev-data-platform/
 │       ├── monitoring/         # Prometheus, Grafana, Loki
 │       ├── nvidia-nim/         # NIM LLM inference
 │       └── nvidia-safe-synth/  # Safe Synthesizer
-├── dagster/                    # Pipeline code
-│   ├── assets/                 # Dagster assets
-│   ├── io_managers/            # Custom I/O managers
-│   └── resources/              # Dagster resources
+├── dagster/                    # Git submodule: github.com/aerugo/brev-dagster-pipelines
+│   ├── src/brev_pipelines/     # Dagster assets, resources, I/O managers
+│   └── .github/workflows/      # CI/CD for Docker image build
 ├── docker/                     # Docker images
-│   └── jupyterhub-singleuser/  # Git submodule: ghcr.io/aerugo/jupyterhub-singleuser
+│   └── jupyterhub-singleuser/  # Git submodule: github.com/aerugo/jupyterhub-singleuser
 ├── scripts/                    # Automation scripts
 │   ├── setup-instance.sh       # Interactive setup (make setup)
 │   ├── bootstrap-rke2.sh       # RKE2 + NVIDIA installation
