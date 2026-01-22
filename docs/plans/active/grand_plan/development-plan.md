@@ -754,5 +754,5 @@ After implementation is complete:
 | Phase 8 | Complete | 2026-01-22 | 2026-01-22 | Dagster + JupyterHub/Marimo |
 | Phase 9 | Complete | 2026-01-22 | 2026-01-22 | NVIDIA NIM Llama 3.1 8B |
 | Phase 10 | Complete | 2026-01-22 | 2026-01-22 | GitHub Actions CI/CD |
-| Phase 10.1 | Pending | | | Dagster Pipelines Repository |
+| Phase 10.1 | Complete | 2026-01-22 | 2026-01-22 | Dagster repo + Docker image |
 | Phase 11 | Pending | | | Validation |
