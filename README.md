@@ -75,100 +75,69 @@ echo 'export SOPS_AGE_KEY_FILE=$HOME/.config/sops/age/keys.txt' >> ~/.zshrc
 source ~/.zshrc
 ```
 
-### Step 4: Run Interactive Setup
+### Step 4: Configure Credentials (Before Setup)
+
+```bash
+# Copy and configure environment file
+cp .env.example .env.local
+# Edit .env.local with your credentials (NGC API key, MinIO passwords, etc.)
+```
+
+> **Important**: Configure `.env.local` BEFORE running setup so secrets are automatically created.
+
+### Step 5: Run Interactive Setup
 
 ```bash
 make setup
 ```
 
-This interactive script will guide you through:
+This single command handles the **complete setup**:
 1. **Instance creation** - If no instance exists, shows instructions to create one via [brev.nvidia.com](https://brev.nvidia.com)
 2. **Instance name** - Prompts for name (default: `brev-data-platform`)
 3. **RKE2 bootstrap** - Installs Kubernetes with GPU support
-4. **Kubeconfig** - Fetches credentials to your local machine
-5. **SSH tunnel** - Sets up secure kubectl access
-6. **Verification** - Confirms cluster and GPU availability
+4. **KAI Scheduler** - Deploys GPU workload scheduler
+5. **Secrets** - Creates Kubernetes secrets from `.env.local`
+6. **ArgoCD** - Installs GitOps controller
+7. **App-of-Apps** - Deploys all platform applications
+8. **Verification** - Confirms cluster, GPU, and service availability
 
-> **Note**: Instance creation must be done via the Brev web console (CRUSOE A100 80GB recommended, ~$1.98/hr).
+> **Note**: Instance creation must be done via the Brev web console (CRUSOE A100 80GB or H200 recommended).
 
-### Step 5: Deploy KAI Scheduler
+### Step 6: Access Services
+
+After setup completes, the script displays all credentials. To access services:
 
 ```bash
-# Deploy KAI Scheduler for GPU workloads
-make bootstrap-kai
+# Set kubeconfig (shown at end of setup)
+export KUBECONFIG=~/.kube/config-brev-data-platform
 
-# Verify KAI Scheduler (7 pods should be running)
-kubectl get pods -n kai-scheduler
+# Wait for ArgoCD to deploy all applications (~5-10 min)
+kubectl get applications -n argocd -w
+
+# Forward all services to localhost
+make port-forward-all
 ```
 
-### Step 6: Create Secrets from .env.local
+Then open the services in your browser:
+- **ArgoCD**: https://localhost:8080 (admin / password shown in setup)
+- **Dagster**: http://localhost:3000
+- **JupyterHub**: http://localhost:8000 (any username/password)
 
-Before deploying applications, create the required secrets:
-
-```bash
-# 1. Copy and configure environment file
-cp .env.example .env.local
-# Edit .env.local with your credentials
-
-# 2. Create secrets manually (if you don't have the SOPS Age key)
-source .env.local
-
-# MinIO credentials
-kubectl create ns minio
-kubectl create secret generic minio-credentials -n minio \
-  --from-literal=rootUser="$MINIO_ROOT_USER" \
-  --from-literal=rootPassword="$MINIO_ROOT_PASSWORD"
-
-# LakeFS credentials (needs MinIO creds + auth key)
-kubectl create ns lakefs
-kubectl create secret generic minio-credentials -n lakefs \
-  --from-literal=rootUser="$MINIO_ROOT_USER" \
-  --from-literal=rootPassword="$MINIO_ROOT_PASSWORD"
-kubectl create secret generic lakefs-credentials -n lakefs \
-  --from-literal=auth_encrypt_secret_key="$(openssl rand -base64 32)"
-
-# ArgoCD GitHub repo access (for private repos)
-kubectl create ns argocd
-kubectl create secret generic repo-creds -n argocd \
-  --from-literal=url=https://github.com/aerugo/brev-data-platform.git \
-  --from-literal=username=git \
-  --from-literal=password="$GITHUB_PAT" \
-  -l argocd.argoproj.io/secret-type=repository
-```
-
-> **Note**: If you have the SOPS Age key configured, you can use `make apply-secrets` instead.
-
-### Step 7: Deploy ArgoCD
+### Step 7: Verify Installation
 
 ```bash
-# Install ArgoCD
-make bootstrap-argocd
-
-# Wait for ArgoCD pods to be ready
-kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=argocd-server -n argocd --timeout=120s
-
-# Get ArgoCD password
-make argocd-password
-
-# Access ArgoCD UI (in another terminal)
-make port-forward-argocd
-# Open https://localhost:8080, login with admin/<password>
-```
-
-### Step 8: Verify Installation
-
-```bash
-# Check cluster
+# Check cluster and GPU
 kubectl get nodes
 kubectl describe node | grep nvidia.com/gpu
 
-# Check all pods
+# Check all pods are running
 kubectl get pods -A
 
-# Check ArgoCD applications
+# Check ArgoCD applications (should show Synced/Healthy)
 kubectl get applications -n argocd
 
-# Expected: All apps should show Synced/Healthy
+# Run full platform validation
+make validate-platform
 ```
 
 ---
