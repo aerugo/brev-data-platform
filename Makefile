@@ -102,19 +102,34 @@ apply-secrets: ## Apply encrypted secrets to cluster
 port-forward-all: ## Forward all services (Ctrl+C to stop)
 	@echo "$(GREEN)Starting port forwards for all services...$(RESET)"
 	@echo ""
-	@echo "Services:"
-	@echo "  ArgoCD:      https://localhost:8080  (admin / make argocd-password)"
-	@echo "  JupyterHub:  http://localhost:8000   (any user / any password)"
-	@echo "  Dagster:     http://localhost:3000"
-	@echo "  LakeFS:      http://localhost:8001"
-	@echo "  MinIO:       http://localhost:9001"
-	@echo "  NIM API:     http://localhost:8002"
-	@echo "  Grafana:     http://localhost:3001   (admin / make grafana-password)"
-	@echo "  Prometheus:  http://localhost:9090"
-	@echo ""
-	@echo "Press Ctrl+C to stop all port forwards"
-	@echo ""
-	@trap 'kill $$(jobs -p) 2>/dev/null' EXIT; \
+	@ARGOCD_PWD=$$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" 2>/dev/null | base64 -d 2>/dev/null || echo "run 'make argocd-password'"); \
+	GRAFANA_PWD=$$(kubectl -n monitoring get secret monitoring-grafana -o jsonpath="{.data.admin-password}" 2>/dev/null | base64 -d 2>/dev/null || echo "run 'make grafana-password'"); \
+	echo "$(CYAN)Services:$(RESET)"; \
+	echo "  ArgoCD:      https://localhost:8080"; \
+	echo "               User: admin  Password: $$ARGOCD_PWD"; \
+	echo ""; \
+	echo "  JupyterHub:  http://localhost:8000"; \
+	echo "               User: any    Password: any"; \
+	echo ""; \
+	echo "  Dagster:     http://localhost:3000"; \
+	echo ""; \
+	echo "  LakeFS:      http://localhost:8001"; \
+	echo "               (credentials in .env.local)"; \
+	echo ""; \
+	echo "  MinIO:       http://localhost:9001"; \
+	echo "               (credentials in .env.local)"; \
+	echo ""; \
+	echo "  NIM API:     http://localhost:8002"; \
+	echo "               (OpenAI-compatible endpoint)"; \
+	echo ""; \
+	echo "  Grafana:     http://localhost:3001"; \
+	echo "               User: admin  Password: $$GRAFANA_PWD"; \
+	echo ""; \
+	echo "  Prometheus:  http://localhost:9090"; \
+	echo ""; \
+	echo "$(YELLOW)Press Ctrl+C to stop all port forwards$(RESET)"; \
+	echo ""; \
+	trap 'kill $$(jobs -p) 2>/dev/null' EXIT; \
 	kubectl port-forward svc/argocd-server -n argocd 8080:443 2>/dev/null & \
 	kubectl port-forward svc/proxy-public -n jupyterhub 8000:80 2>/dev/null & \
 	kubectl port-forward svc/dagster-webserver -n dagster 3000:3000 2>/dev/null & \
