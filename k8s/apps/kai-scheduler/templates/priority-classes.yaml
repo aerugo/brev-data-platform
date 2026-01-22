@@ -1,0 +1,33 @@
+# Custom Priority Classes for GPU Workload Orchestration
+#
+# KAI default priorities:
+#   train (50) - preemptible training
+#   build-preemptible (75) - preemptible interactive
+#   build (100) - non-preemptible builds
+#   inference (125) - non-preemptible inference
+#
+# Custom priority classes:
+#   batch-high (130) - allows batch jobs to preempt inference
+#
+# Preemption flow:
+# 1. NIM runs with inference priority (125) in inference-queue
+# 2. Safe Synthesizer job submitted with batch-high (130)
+# 3. KAI preempts NIM pod (lower priority)
+# 4. Safe Synth runs to completion
+# 5. NIM Deployment restarts its pod automatically
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: batch-high
+  labels:
+    app.kubernetes.io/name: kai-scheduler
+    app.kubernetes.io/component: priority-class
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+value: 130
+globalDefault: false
+preemptionPolicy: PreemptLowerPriority
+description: |
+  High-priority batch jobs that can preempt inference workloads.
+  Use for Safe Synthesizer and other batch jobs requiring exclusive GPU.
+  After job completion, preempted inference pods automatically restart.

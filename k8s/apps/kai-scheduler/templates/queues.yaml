@@ -1,11 +1,17 @@
 # KAI Scheduler Queue Configuration
-# Sets resource quotas for GPU workload scheduling
+# Hierarchical queues for GPU workload scheduling
 #
-# The parent queue defines the total cluster resources available for GPU workloads.
-# The default-queue inherits from parent and is used by all GPU pods.
+# Queue Hierarchy:
+#   default-parent-queue (cluster-level)
+#   ├── inference-queue (NIM, always-on services)
+#   ├── batch-queue (Safe Synthesizer, training jobs)
+#   └── default-queue (backwards compatibility)
 #
-# Note: KAI Scheduler creates default queues on install, but they have 0 quota.
-# This template overrides them with actual cluster resource limits.
+# GPU Orchestration Strategy:
+# - NIM runs in inference-queue with priority 100
+# - Safe Synthesizer runs in batch-queue with priority 50
+# - When batch-high priority (130) jobs submit, they preempt inference
+# - After job completion, NIM Deployment automatically restarts
 ---
 apiVersion: scheduling.run.ai/v2
 kind: Queue
@@ -15,7 +21,7 @@ metadata:
     helm.sh/resource-policy: keep
 spec:
   resources:
-    # Total CPU available for GPU workloads (millicores format not needed)
+    # Total CPU available for GPU workloads
     cpu:
       quota: 12000  # 12 cores (node has 12, ~4 used by system)
       limit: -1     # No upper limit (overcommit allowed)
@@ -31,6 +37,59 @@ spec:
       limit: -1
       overQuotaWeight: 1
 ---
+# Inference Queue - For always-on GPU services (NIM)
+# Has full GPU quota, workloads here are non-preemptible by default
+apiVersion: scheduling.run.ai/v2
+kind: Queue
+metadata:
+  name: inference-queue
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  parentQueue: default-parent-queue
+  # Priority determines resource allocation order
+  priority: 100
+  resources:
+    cpu:
+      quota: 8000
+      limit: -1
+      overQuotaWeight: 1
+    gpu:
+      quota: 1      # Full GPU quota for inference
+      limit: 1
+      overQuotaWeight: 0  # Cannot go over quota
+    memory:
+      quota: 80000000000
+      limit: -1
+      overQuotaWeight: 1
+---
+# Batch Queue - For batch jobs (Safe Synthesizer, training)
+# Zero quota, borrows from inference-queue via preemption
+apiVersion: scheduling.run.ai/v2
+kind: Queue
+metadata:
+  name: batch-queue
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  parentQueue: default-parent-queue
+  # Lower priority, but can preempt via priority classes
+  priority: 50
+  resources:
+    cpu:
+      quota: 8000
+      limit: -1
+      overQuotaWeight: 1
+    gpu:
+      quota: 0      # No guaranteed quota
+      limit: 1      # Can use full GPU when available
+      overQuotaWeight: 1  # Can borrow unused resources
+    memory:
+      quota: 80000000000
+      limit: -1
+      overQuotaWeight: 1
+---
+# Keep default-queue for backwards compatibility
 apiVersion: scheduling.run.ai/v2
 kind: Queue
 metadata:
