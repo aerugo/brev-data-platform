@@ -1,0 +1,21 @@
+# YAML Lint configuration
+extends: default
+
+rules:
+  line-length:
+    max: 200
+    level: warning
+  truthy:
+    allowed-values: ['true', 'false', 'on', 'off', 'yes', 'no']
+  comments:
+    min-spaces-from-content: 1
+  document-start: disable
+  indentation:
+    spaces: 2
+    indent-sequences: consistent
+
+ignore: |
+  k8s/apps/*/charts/
+  .github/
+  node_modules/
+  docker/

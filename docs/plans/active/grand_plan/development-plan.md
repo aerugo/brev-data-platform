@@ -748,7 +748,7 @@ After implementation is complete:
 | Phase 5 | Complete | 2026-01-21 | 2026-01-21 | ArgoCD with app-of-apps |
 | Phase 6 | Complete | 2026-01-21 | 2026-01-22 | MinIO + LakeFS with persistence |
 | Phase 7 | Complete | 2026-01-22 | 2026-01-22 | Prometheus, Grafana, Loki, DCGM |
-| Phase 8 | Complete | 2026-01-22 | 2026-01-22 | Dagster + Marimo |
+| Phase 8 | Complete | 2026-01-22 | 2026-01-22 | Dagster + JupyterHub/Marimo |
 | Phase 9 | Complete | 2026-01-22 | 2026-01-22 | NVIDIA NIM Llama 3.1 8B |
-| Phase 10 | Pending | | | CI/CD |
+| Phase 10 | Complete | 2026-01-22 | 2026-01-22 | GitHub Actions CI/CD |
 | Phase 11 | Pending | | | Validation |
