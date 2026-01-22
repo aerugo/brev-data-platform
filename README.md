@@ -167,7 +167,7 @@ kubectl get applications -n argocd
 | 6 | LakeFS | ✅ Complete | 10Gi persistent storage |
 | 7 | Monitoring | ✅ Complete | Prometheus, Grafana, Loki, DCGM Exporter |
 | 8 | Dagster | ✅ Complete | Pipeline orchestration with custom user code |
-| 8 | JupyterHub + Marimo | ✅ Complete | Multi-user notebooks with GPU profiles |
+| 8 | JupyterHub + Marimo | ✅ Complete | Multi-user notebooks with custom image ([ghcr.io/aerugo/jupyterhub-singleuser](https://github.com/aerugo/jupyterhub-singleuser)) |
 | 9 | NVIDIA NIM | ✅ Complete | Llama 3.1 8B Instruct - OpenAI-compatible API |
 | 9 | Safe Synthesizer | ✅ Complete | Scaled to 0 (single GPU constraint - NIM takes priority) |
 
@@ -278,6 +278,39 @@ make grafana-password        # Get Grafana admin password
 make lint                    # Lint Helm and Python
 make validate                # Validate configurations
 ```
+
+---
+
+## JupyterHub
+
+JupyterHub provides multi-user notebook environments with a custom singleuser image:
+
+**Image:** `ghcr.io/aerugo/jupyterhub-singleuser:latest`
+**Source:** https://github.com/aerugo/jupyterhub-singleuser (submodule in `docker/jupyterhub-singleuser/`)
+
+### Pre-installed Libraries
+
+| Category | Libraries |
+|----------|-----------|
+| **Notebooks** | Marimo, JupyterLab with Marimo extension |
+| **Data Science** | pandas, polars, numpy, scipy, scikit-learn |
+| **Visualization** | matplotlib, seaborn, plotly |
+| **Data Processing** | duckdb, pyarrow, sqlalchemy |
+| **ML/AI** | PyTorch (CPU), transformers, openai, anthropic |
+| **Storage** | boto3, s3fs, lakefs-client |
+
+### User Profiles
+
+| Profile | Resources | Use Case |
+|---------|-----------|----------|
+| **Standard (CPU only)** | 2 CPU, 4GB RAM | Data analysis, light workloads |
+| **GPU Server** | 2 CPU, 8GB RAM, 1x GPU | ML training via KAI Scheduler |
+
+### Environment Variables
+
+Singleuser pods have MinIO and LakeFS credentials injected:
+- `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`
+- `LAKEFS_ENDPOINT`, `LAKEFS_ACCESS_KEY_ID`, `LAKEFS_SECRET_ACCESS_KEY`
 
 ---
 
@@ -456,7 +489,7 @@ brev-data-platform/
 │   ├── io_managers/            # Custom I/O managers
 │   └── resources/              # Dagster resources
 ├── docker/                     # Docker images
-│   └── jupyterhub-singleuser/  # JupyterHub singleuser Dockerfile
+│   └── jupyterhub-singleuser/  # Git submodule: ghcr.io/aerugo/jupyterhub-singleuser
 ├── scripts/                    # Automation scripts
 │   ├── setup-instance.sh       # Interactive setup (make setup)
 │   ├── bootstrap-rke2.sh       # RKE2 + NVIDIA installation
