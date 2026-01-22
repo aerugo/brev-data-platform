@@ -57,13 +57,11 @@ dagster:
       - name: "k8s-example-user-code-1"
         image:
           repository: "docker.io/dagster/user-code-example"
-          tag: "1.12.11"
+          tag: ~
           pullPolicy: Always
         dagsterApiGrpcArgs:
-          - "-m"
-          - "dagster_test.test_project.test_jobs.repo"
-          - "-a"
-          - "define_demo_execution_repo"
+          - "--python-file"
+          - "/example_project/example_repo/repo.py"
         port: 3030
         resources:
           requests:
