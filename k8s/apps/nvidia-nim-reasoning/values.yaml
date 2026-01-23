@@ -17,8 +17,8 @@
 # Container image - GPT-OSS-120B via NVIDIA NIM
 image:
   repository: nvcr.io/nim/openai/gpt-oss-120b
-  tag: "1.0.0"
-  pullPolicy: IfNotPresent
+  tag: "latest"
+  pullPolicy: Always
 
 # NGC image pull secret (created by apply-secrets.sh)
 imagePullSecrets:
