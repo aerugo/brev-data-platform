@@ -6,8 +6,9 @@ version: 0.1.0
 appVersion: "1.15.4"
 
 # GPU Requirements:
-# - H200 (141GB): REQUIRED - enables 70GB allocation for NIM + 70GB for JupyterHub GPU
-# - A100 (80GB): INSUFFICIENT - cannot support concurrent GPU workloads
+# - H200 (141GB): REQUIRED - dual-model setup needs 107GB total
+# - Llama 8B: 25GB, GPT-OSS-120B: 80GB, Embedding: 2GB
+# - A100 (80GB): INSUFFICIENT - cannot support dual-model setup
 # - T4/A10G: NOT SUPPORTED - too small for production workloads
 #
 # See docs/plans/active/grand_plan/phases/phase-7-nvidia-ai.md for details

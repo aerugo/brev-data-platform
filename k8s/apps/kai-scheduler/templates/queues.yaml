@@ -3,15 +3,23 @@
 #
 # Queue Hierarchy:
 #   default-parent-queue (cluster-level)
-#   ├── inference-queue (NIM, always-on services)
+#   ├── inference-queue (NIM LLM, NIM Reasoning, NIM Embedding)
 #   ├── batch-queue (Safe Synthesizer, training jobs)
 #   └── default-queue (backwards compatibility)
 #
+# GPU Memory Budget (H200 141GB):
+#   - Llama 8B (nim-llm): 25GB
+#   - GPT-OSS-120B (nim-reasoning): 80GB
+#   - Embedding (nim-embedding): 2GB
+#   - Total inference: 107GB
+#   - Remaining for JupyterHub/batch: 34GB
+#
 # GPU Orchestration Strategy:
-# - NIM runs in inference-queue with priority 100
+# - All NIM services run in inference-queue with priority 100
+# - KAI fractional allocation manages GPU memory per-pod
 # - Safe Synthesizer runs in batch-queue with priority 50
 # - When batch-high priority (130) jobs submit, they preempt inference
-# - After job completion, NIM Deployment automatically restarts
+# - After job completion, NIM Deployments automatically restart
 ---
 apiVersion: scheduling.run.ai/v2
 kind: Queue
@@ -37,8 +45,8 @@ spec:
       limit: -1
       overQuotaWeight: 1
 ---
-# Inference Queue - For always-on GPU services (NIM LLM and Embedding)
-# Both NIM services share the GPU via KAI fractional allocation
+# Inference Queue - For always-on GPU services (NIM LLM, Reasoning, Embedding)
+# All NIM services share the GPU via KAI fractional allocation
 # Over-quota workloads become preemptible (higher priority preempts lower)
 apiVersion: scheduling.run.ai/v2
 kind: Queue
@@ -52,15 +60,15 @@ spec:
   priority: 100
   resources:
     cpu:
-      quota: 8000
+      quota: 12000
       limit: -1
       overQuotaWeight: 1
     gpu:
       quota: 1      # Full GPU quota for inference
-      limit: 2      # Allow up to 2 GPU requests (both NIMs)
+      limit: 3      # Allow up to 3 GPU requests (LLM, Reasoning, Embedding)
       overQuotaWeight: 1  # Over-quota pods are preemptible
     memory:
-      quota: 80000000000
+      quota: 110000000000  # ~110GB for all inference models
       limit: -1
       overQuotaWeight: 1
 ---

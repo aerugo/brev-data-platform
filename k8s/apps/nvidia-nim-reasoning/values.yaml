@@ -1,0 +1,143 @@
+# NVIDIA NIM Reasoning Model (GPT-OSS-120B) Configuration
+#
+# GPT-OSS-120B is a Mixture-of-Experts reasoning model:
+# - 117B total parameters, ~5.1B active per inference
+# - Designed to fit within 80GB GPU (MXFP4 quantization)
+# - Configurable reasoning effort (low/medium/high)
+# - 128K context window
+#
+# This runs alongside Llama 3.1 8B for a dual-model setup:
+# - Llama 8B: Fast inference for simple tasks (25GB)
+# - GPT-OSS-120B: Deep reasoning for complex tasks (80GB)
+# - Both share H200 141GB via KAI fractional allocation
+#
+# IMPORTANT: Requires NGC secrets applied first:
+#   ./scripts/apply-secrets.sh
+
+# Container image - GPT-OSS-120B via NVIDIA NIM
+image:
+  repository: nvcr.io/nim/openai/gpt-oss-120b
+  tag: "1.0.0"
+  pullPolicy: IfNotPresent
+
+# NGC image pull secret (created by apply-secrets.sh)
+imagePullSecrets:
+  - name: ngc-image-pull
+
+replicaCount: 1
+
+# GPU resources - using KAI Scheduler fractional GPU allocation
+# GPT-OSS-120B needs 80GB VRAM (MoE with MXFP4 quantization)
+# Combined with Llama 8B (25GB) + Embedding (2GB) = 107GB total
+# Leaves ~34GB headroom on H200 141GB
+resources:
+  requests:
+    memory: 96Gi
+    cpu: 4
+    nvidia.com/gpu: 1
+  limits:
+    memory: 128Gi
+    cpu: 8
+    nvidia.com/gpu: 1
+
+# Use NVIDIA RuntimeClass (created by bootstrap-rke2.sh)
+runtimeClassName: nvidia
+
+# KAI Scheduler for GPU workloads
+# Enables fractional GPU, gang scheduling, and topology-aware placement
+schedulerName: kai-scheduler
+
+# KAI Queue assignment - shares inference queue with Llama 8B
+# Both models run concurrently via KAI fractional allocation
+podLabels:
+  kai.scheduler/queue: inference-queue
+  model-type: reasoning
+
+# Priority class - same as Llama 8B (inference, value 125)
+# Both models are non-preemptible, can be preempted by batch-high (130)
+priorityClassName: inference
+
+# KAI Scheduler annotations for fractional GPU allocation
+# Requests 80GB of GPU memory for GPT-OSS-120B
+podAnnotations:
+  kai.scheduler.nvidia.com/gpu-memory: "80Gi"
+
+# Tolerations for GPU nodes
+tolerations:
+  - key: nvidia.com/gpu
+    operator: Exists
+    effect: NoSchedule
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 8000
+  # OpenAI-compatible endpoint at /v1/chat/completions
+  # Prometheus scraping annotations
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8000"
+    prometheus.io/path: "/v1/metrics"
+
+# Observability configuration
+observability:
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    labels:
+      release: monitoring
+
+# Environment variables per NVIDIA docs
+env:
+  # NGC API key for model downloads
+  - name: NGC_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: ngc-credentials
+        key: api-key
+  # Model cache location
+  - name: NIM_CACHE_PATH
+    value: "/opt/nim/.cache"
+  # Logging level
+  - name: NIM_LOG_LEVEL
+    value: "INFO"
+  # Observability - Prometheus metrics endpoint
+  - name: NIM_ENABLE_METRICS
+    value: "true"
+  # Observability - Log prompts and responses
+  - name: NIM_LOG_REQUESTS
+    value: "true"
+  # OpenTelemetry service name
+  - name: OTEL_SERVICE_NAME
+    value: "nim-reasoning"
+
+# Model cache persistence
+# GPT-OSS-120B model weights are ~60GB quantized
+persistence:
+  enabled: true
+  size: 100Gi
+  mountPath: /opt/nim/.cache
+  accessMode: ReadWriteOnce
+
+# Health probes - MoE models load faster than dense models of similar quality
+startupProbe:
+  httpGet:
+    path: /v1/health/ready
+    port: 8000
+  initialDelaySeconds: 120
+  periodSeconds: 15
+  failureThreshold: 40  # Allow 10 minutes for model loading
+
+livenessProbe:
+  httpGet:
+    path: /v1/health/live
+    port: 8000
+  initialDelaySeconds: 30
+  periodSeconds: 15
+
+readinessProbe:
+  httpGet:
+    path: /v1/health/ready
+    port: 8000
+  initialDelaySeconds: 30
+  periodSeconds: 10
