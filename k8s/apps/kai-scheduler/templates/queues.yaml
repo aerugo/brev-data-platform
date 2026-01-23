@@ -34,9 +34,9 @@ spec:
       quota: 12000  # 12 cores (node has 12, ~4 used by system)
       limit: -1     # No upper limit (overcommit allowed)
       overQuotaWeight: 1
-    # Total GPU available
+    # Total GPU available (quota counts GPU requests, not physical GPUs)
     gpu:
-      quota: 1      # 1 H200 GPU
+      quota: 3      # Allow 3 fractional GPU requests on 1 H200
       limit: -1
       overQuotaWeight: 1
     # Total memory available for GPU workloads
