@@ -6,10 +6,15 @@
 # - Configurable reasoning effort (low/medium/high)
 # - 128K context window
 #
-# This runs alongside Llama 3.1 8B for a dual-model setup:
-# - Llama 8B: Fast inference for simple tasks (25GB)
-# - GPT-OSS-120B: Deep reasoning for complex tasks (80GB)
-# - Both share H200 141GB via KAI fractional allocation
+# TIME-SHARING GPU STRATEGY:
+# - nim-reasoning defaults to 0 replicas (off)
+# - Scale to 1 replica when reasoning is needed
+# - Uses batch-high priority (130) to preempt nim-llm (125)
+# - When nim-reasoning scales down, nim-llm auto-restarts
+#
+# Usage:
+#   kubectl scale deployment nim-reasoning -n nvidia-ai --replicas=1  # Enable
+#   kubectl scale deployment nim-reasoning -n nvidia-ai --replicas=0  # Disable
 #
 # IMPORTANT: Requires NGC secrets applied first:
 #   ./scripts/apply-secrets.sh
@@ -24,7 +29,8 @@ image:
 imagePullSecrets:
   - name: ngc-image-pull
 
-replicaCount: 1
+# Default to 0 - scale up on demand to preempt nim-llm
+replicaCount: 0
 
 # GPU resources - using KAI Scheduler fractional GPU allocation
 # GPT-OSS-120B needs 80GB VRAM (MoE with MXFP4 quantization)
@@ -47,15 +53,14 @@ runtimeClassName: nvidia
 # Enables fractional GPU, gang scheduling, and topology-aware placement
 schedulerName: kai-scheduler
 
-# KAI Queue assignment - shares inference queue with Llama 8B
-# Both models run concurrently via KAI fractional allocation
+# KAI Queue assignment - uses inference queue for GPU scheduling
 podLabels:
   kai.scheduler/queue: inference-queue
   model-type: reasoning
 
-# Priority class - same as Llama 8B (inference, value 125)
-# Both models are non-preemptible, can be preempted by batch-high (130)
-priorityClassName: inference
+# Priority class - batch-high (130) to preempt nim-llm (inference, 125)
+# When scaled up, nim-reasoning preempts nim-llm for GPU access
+priorityClassName: batch-high
 
 # KAI Scheduler annotations for fractional GPU allocation
 # Requests 80GB of GPU memory for GPT-OSS-120B
