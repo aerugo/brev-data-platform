@@ -32,10 +32,9 @@ imagePullSecrets:
 # Default to 0 - scale up on demand to preempt nim-llm
 replicaCount: 0
 
-# GPU resources - using KAI Scheduler fractional GPU allocation
-# GPT-OSS-120B needs 80GB VRAM (MoE with MXFP4 quantization)
-# Combined with Llama 8B (25GB) + Embedding (2GB) = 107GB total
-# Leaves ~34GB headroom on H200 141GB
+# GPU resources - uses full GPU when running (time-sharing, not fractional)
+# GPT-OSS-120B needs ~80GB VRAM (MoE with MXFP4 quantization)
+# NIM allocates full GPU memory, so this preempts nim-llm when scaled up
 resources:
   requests:
     memory: 96Gi
