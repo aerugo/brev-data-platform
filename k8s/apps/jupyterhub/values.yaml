@@ -189,7 +189,9 @@ jupyterhub:
               protocol: TCP
             - port: 9001  # MinIO Console
               protocol: TCP
-            - port: 80    # Weaviate HTTP
+            - port: 80    # Weaviate HTTP (service port)
+              protocol: TCP
+            - port: 8080  # Weaviate HTTP (pod port)
               protocol: TCP
             - port: 50051 # Weaviate gRPC
               protocol: TCP
