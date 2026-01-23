@@ -64,8 +64,8 @@ spec:
       limit: -1
       overQuotaWeight: 1
     gpu:
-      quota: 1      # Full GPU quota for inference
-      limit: 3      # Allow up to 3 GPU requests (LLM, Reasoning, Embedding)
+      quota: 3      # Allow 3 non-preemptible inference pods (LLM, Reasoning, Embedding)
+      limit: 3      # Allow up to 3 GPU requests via fractional allocation
       overQuotaWeight: 1  # Over-quota pods are preemptible
     memory:
       quota: 110000000000  # ~110GB for all inference models
