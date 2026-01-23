@@ -21,6 +21,9 @@ minio:
 
   # Root credentials - loaded from secret
   existingSecret: minio-credentials
+  # Map secret keys to expected names (our secret uses root-user/root-password)
+  secretUserKey: root-user
+  secretPasswordKey: root-password
 
   # Console service
   consoleService:
