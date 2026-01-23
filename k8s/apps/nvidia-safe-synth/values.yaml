@@ -26,6 +26,13 @@ global:
   imagePullSecrets:
     - name: ngc-image-pull
 
+# Core platform configuration
+core:
+  config:
+    platform:
+      # Disable service account auth for easier API access
+      enable_service_account_auth: false
+
 # Safe Synthesizer configuration
 safe-synthesizer:
   # Default to 0 replicas - scale up on demand
