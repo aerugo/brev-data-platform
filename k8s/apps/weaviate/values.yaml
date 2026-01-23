@@ -81,7 +81,10 @@ weaviate:
 
   # Disable authorization for development
   authorization:
-    admin_list: []
+    admin_list:
+      enabled: false
+      users: []
+      read_only_users: []
 
   # Liveness and readiness probes
   livenessProbe:
