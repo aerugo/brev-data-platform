@@ -51,24 +51,26 @@ terraform/
 ### INV-I003: H200 141GB GPU Required
 
 Brev instances for this platform **MUST** have an NVIDIA H200 141GB GPU. Smaller GPUs (A100 80GB, T4, etc.) are NOT supported due to:
-- **NIM LLM**: 70GB VRAM allocation for Llama 3.1 8B (with headroom for larger models)
-- **JupyterHub GPU notebooks**: 70GB VRAM allocation for ML/AI workloads
-- **KAI Scheduler fractional GPU sharing**: Requires 140GB total for concurrent workloads
-- A100 80GB cannot support NIM + GPU notebooks running simultaneously
+- **NIM LLM (Llama 8B)**: 25GB VRAM allocation for fast inference
+- **NIM Reasoning (GPT-OSS-120B)**: 80GB VRAM allocation for complex reasoning tasks
+- **NIM Embedding**: 2GB VRAM allocation
+- **Total inference workloads**: 107GB
+- **Remaining for JupyterHub/batch**: 34GB
+- A100 80GB cannot support dual-model + embedding setup
 
 ```bash
 # Correct - H200 141GB (Brev instance from web console)
 # CRUSOE provider (required):
 INSTANCE_TYPE="h200-141gb.1x"    # H200 141GB
 
-# Incorrect - insufficient VRAM for concurrent GPU sharing
+# Incorrect - insufficient VRAM for dual-model setup
 INSTANCE_TYPE="a100-80gb.1x"    # INSUFFICIENT - only 80GB
 GPU_TYPE="n1-highmem-4:nvidia-tesla-t4:1"  # NEVER - only 16GB
 ```
 
 **Note**: H200 instances are available through CRUSOE provider via Brev web console. The Brev CLI only supports GCP which does not have H200 availability. See INV-I005 for documented exception.
 
-**Rationale**: The platform uses KAI Scheduler for fractional GPU allocation, allowing NIM LLM (70GB) and JupyterHub GPU notebooks (70GB) to run concurrently. This requires 140GB VRAM minimum, which only H200 141GB provides.
+**Rationale**: The platform uses KAI Scheduler for fractional GPU allocation, allowing dual LLM models (Llama 8B for fast inference, GPT-OSS-120B for reasoning) plus embedding to run concurrently. This requires 107GB VRAM for inference, with headroom for JupyterHub notebooks.
 
 ### INV-I004: Cloud-Init/Script for RKE2 Bootstrap
 

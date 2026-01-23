@@ -1,0 +1,16 @@
+apiVersion: v2
+name: nvidia-nim-reasoning
+description: NVIDIA NIM GPT-OSS-120B reasoning model for Brev Data Platform
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+
+# GPU Requirements:
+# - H200 (141GB): REQUIRED - GPT-OSS-120B needs 80GB VRAM
+# - Runs alongside Llama 8B (25GB) via KAI fractional GPU allocation
+#
+# Model: GPT-OSS-120B (OpenAI)
+# - 117B total parameters, ~5.1B active (Mixture-of-Experts)
+# - Optimized for reasoning with configurable effort levels
+# - Fits in 80GB GPU with MXFP4 quantization
+# - 128K context window

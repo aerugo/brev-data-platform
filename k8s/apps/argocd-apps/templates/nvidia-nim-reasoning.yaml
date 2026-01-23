@@ -1,0 +1,26 @@
+# NVIDIA NIM Reasoning Model (GPT-OSS-120B) Application
+# Sync Wave 3: AI Layer (same as other NIM services)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: nvidia-nim-reasoning
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/aerugo/brev-data-platform.git
+    targetRevision: main
+    path: k8s/apps/nvidia-nim-reasoning
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: nvidia-ai
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
