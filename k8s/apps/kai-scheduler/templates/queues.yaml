@@ -73,7 +73,7 @@ spec:
       overQuotaWeight: 1
 ---
 # Batch Queue - For batch jobs (Safe Synthesizer, training)
-# Zero quota, borrows from inference-queue via preemption
+# Quota allows scheduling, priority-based preemption handles GPU access
 apiVersion: scheduling.run.ai/v2
 kind: Queue
 metadata:
@@ -82,7 +82,7 @@ metadata:
     helm.sh/resource-policy: keep
 spec:
   parentQueue: default-parent-queue
-  # Lower priority, but can preempt via priority classes
+  # Lower queue priority, but batch-high pods (130) preempt inference (125)
   priority: 50
   resources:
     cpu:
@@ -90,9 +90,9 @@ spec:
       limit: -1
       overQuotaWeight: 1
     gpu:
-      quota: 0      # No guaranteed quota
-      limit: 1      # Can use full GPU when available
-      overQuotaWeight: 1  # Can borrow unused resources
+      quota: 1      # Allow 1 batch GPU workload (safe-synth or training)
+      limit: 1      # Can use full GPU
+      overQuotaWeight: 1
     memory:
       quota: 80000000000
       limit: -1
