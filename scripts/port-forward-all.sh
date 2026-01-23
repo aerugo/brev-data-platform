@@ -30,6 +30,7 @@ SERVICES=(
     "LakeFS:lakefs:lakefs:8001:8000:http"
     "MinIO:minio:minio-console:9001:9001:http"
     "NIM-LLM:nvidia-ai:nim-llm:8002:8000:http"
+    "Weaviate:weaviate:weaviate:8003:80:http"
     "Grafana:monitoring:monitoring-grafana:3001:80:http"
     "Prometheus:monitoring:monitoring-kube-prometheus-prometheus:9090:9090:http"
 )
@@ -232,6 +233,12 @@ show_credentials() {
     # NIM LLM
     echo -e "${GREEN}NIM LLM${NC}       http://localhost:8002"
     echo "              OpenAI-compatible API (no auth)"
+    echo ""
+
+    # Weaviate
+    echo -e "${GREEN}Weaviate${NC}      http://localhost:8003"
+    echo "              Vector DB REST API (no auth)"
+    echo "              GraphQL: http://localhost:8003/v1/graphql"
     echo ""
 
     # Grafana

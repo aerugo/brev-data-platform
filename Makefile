@@ -2,7 +2,7 @@
 .PHONY: help setup delete-instance start-instance stop-instance shell status \
         kubeconfig ssh-tunnel ssh-tunnel-bg bootstrap-rke2 bootstrap-kai apply-secrets \
         port-forward-all port-forward-argocd port-forward-minio port-forward-lakefs \
-        port-forward-dagster port-forward-jupyterhub port-forward-nim \
+        port-forward-dagster port-forward-jupyterhub port-forward-nim port-forward-weaviate \
         port-forward-grafana port-forward-prometheus port-forward-loki \
         encrypt decrypt edit-secret create-secrets lint validate \
         validate-platform validate-quick validate-k8s \
@@ -208,6 +208,11 @@ port-forward-jupyterhub: ## Forward JupyterHub to localhost:8000
 port-forward-nim: ## Forward NIM LLM to localhost:8002
 	@echo "NIM LLM API: http://localhost:8002"
 	kubectl port-forward svc/nim-llm -n nvidia-ai 8002:8000
+
+port-forward-weaviate: ## Forward Weaviate to localhost:8003
+	@echo "Weaviate REST API: http://localhost:8003"
+	@echo "Weaviate GraphQL: http://localhost:8003/v1/graphql"
+	kubectl port-forward svc/weaviate -n weaviate 8003:80
 
 port-forward-grafana: ## Forward Grafana to localhost:3001
 	@echo "Grafana UI: http://localhost:3001"
