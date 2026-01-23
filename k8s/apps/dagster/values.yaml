@@ -68,11 +68,11 @@ dagster:
         port: 4000
         resources:
           requests:
-            memory: 512Mi
-            cpu: 250m
+            memory: 2Gi
+            cpu: 500m
           limits:
-            memory: 1Gi
-            cpu: 1000m
+            memory: 4Gi
+            cpu: 2000m
         envSecrets:
           - name: dagster-env-secrets
           - name: nds-credentials
