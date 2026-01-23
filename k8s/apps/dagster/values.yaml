@@ -69,12 +69,12 @@ dagster:
         env:
           # NDS (NeMo Data Store) configuration for Safe Synthesizer
           - name: NDS_ENDPOINT
-            value: "http://nvidia-safe-synth-data-store.nvidia-ai.svc.cluster.local:3000/v1/hf"
+            value: "http://nemo-data-store.nvidia-ai.svc.cluster.local:3000"
           - name: NDS_REPO
             value: "admin/central-bank-speeches"
           # Safe Synthesizer configuration
           - name: SAFE_SYNTH_ENDPOINT
-            value: "http://nvidia-safe-synth-safe-synthesizer.nvidia-ai.svc.cluster.local:8080"
+            value: "http://nemo-safe-synthesizer.nvidia-ai.svc.cluster.local:8000"
           # Set to "false" to use real Safe Synthesizer API (requires GPU)
           - name: SAFE_SYNTH_MOCK_MODE
             value: "true"
