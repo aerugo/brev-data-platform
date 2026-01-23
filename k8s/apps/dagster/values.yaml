@@ -41,6 +41,16 @@ dagster:
       k8sRunLauncher:
         imagePullPolicy: Always
         loadInclusterConfig: true
+        # Higher memory limits for run workers processing full datasets
+        runK8sConfig:
+          containerConfig:
+            resources:
+              requests:
+                memory: 2Gi
+                cpu: 500m
+              limits:
+                memory: 4Gi
+                cpu: 2000m
 
   # User code deployments with custom image from GHCR
   dagster-user-deployments:
