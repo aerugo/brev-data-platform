@@ -2,12 +2,18 @@
 # Based on official NVIDIA documentation:
 # https://docs.nvidia.com/nemo/microservices/latest/generate-private-synthetic-data/
 #
-# Configured for H200 GPU (141GB VRAM)
-# - Safe Synthesizer requires 80GB VRAM and EXCLUSIVE GPU access
-# - Cannot run concurrently with NIM (which uses 70GB for fractional sharing)
-# - Deployed with replicas: 0 by default; scale up when needed
+# TIME-SHARING GPU STRATEGY:
+# - safe-synth defaults to 0 replicas (off)
+# - Scale to 1 replica when synthetic data generation is needed
+# - Uses batch-high priority (130) to preempt nim-llm (125)
+# - When safe-synth scales down, nim-llm auto-restarts
 #
-# Platform requires H200 141GB for NIM + JupyterHub GPU sharing.
+# Usage:
+#   kubectl scale deployment safe-synth -n nvidia-ai --replicas=1  # Enable
+#   kubectl scale deployment safe-synth -n nvidia-ai --replicas=0  # Disable
+#
+# IMPORTANT: Requires NGC secrets applied first:
+#   ./scripts/apply-secrets.sh
 
 # Deployment mode: local (GPU inference) or api-only
 mode: local
@@ -22,14 +28,12 @@ image:
 imagePullSecrets:
   - name: ngc-image-pull
 
-# Set to 0 when NIM is running (only 1 GPU available)
-# Scale up when needed for synthetic data generation
+# Default to 0 - scale up on demand to preempt nim-llm
 replicaCount: 0
 
-# GPU resources for H200 (141GB VRAM)
-# Safe Synthesizer recommends 80GB, H200 has 141GB
-# Reduced CPU to fit cluster constraints
-# Note: Set replicaCount to 0 when NIM is running (only 1 GPU available)
+# GPU resources - uses full GPU when running (time-sharing, not fractional)
+# Safe Synthesizer requires ~80GB VRAM
+# NIM allocates full GPU memory, so this preempts nim-llm when scaled up
 resources:
   requests:
     memory: 32Gi
@@ -43,9 +47,17 @@ resources:
 # Use NVIDIA RuntimeClass (created by bootstrap-rke2.sh)
 runtimeClassName: nvidia
 
-# KAI Scheduler for GPU workloads (Phase 3.5)
-# Enables fractional GPU, gang scheduling, and topology-aware placement
+# KAI Scheduler for GPU workloads
 schedulerName: kai-scheduler
+
+# Priority class - batch-high (130) to preempt nim-llm (inference, 125)
+# When scaled up, safe-synth preempts nim-llm for GPU access
+priorityClassName: batch-high
+
+# KAI Queue assignment - uses batch queue for GPU scheduling
+podLabels:
+  kai.scheduler/queue: batch-queue
+  workload-type: batch
 
 # Tolerations for GPU nodes
 tolerations:

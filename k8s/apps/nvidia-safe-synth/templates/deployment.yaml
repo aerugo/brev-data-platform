@@ -18,10 +18,16 @@ spec:
     metadata:
       labels:
         app: safe-synth
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
     spec:
       # KAI Scheduler for GPU workloads
       {{- if .Values.schedulerName }}
       schedulerName: {{ .Values.schedulerName }}
+      {{- end }}
+      {{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName }}
       {{- end }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
