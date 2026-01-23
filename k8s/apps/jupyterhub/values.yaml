@@ -145,7 +145,7 @@ jupyterhub:
       WEAVIATE_HOST:
         value: "weaviate.weaviate.svc.cluster.local"
       WEAVIATE_PORT:
-        value: "8080"
+        value: "80"
       WEAVIATE_GRPC_PORT:
         value: "50051"
       # NIM Embedding service for generating query embeddings
