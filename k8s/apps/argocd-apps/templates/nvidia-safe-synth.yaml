@@ -1,8 +1,12 @@
 # NVIDIA Safe Synthesizer Application - Synthetic Data Generation
+# Uses NVIDIA's official NeMo Microservices Helm Chart from NGC
 # Sync Wave 3: AI Layer
 #
 # NOTE: ignoreDifferences allows Dagster to scale replicas without ArgoCD reverting.
 # The SafeSynthesizerResource scales 0->1 for synthesis, then back to 0.
+#
+# Chart: nemo-microservices-helm-chart from NGC
+# Only safe-synthesizer tag is enabled (not the full platform)
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -14,10 +18,17 @@ metadata:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
-  source:
-    repoURL: https://github.com/aerugo/brev-data-platform.git
-    targetRevision: main
-    path: k8s/apps/nvidia-safe-synth
+  # Multiple sources: NGC Helm chart + values from our repo
+  sources:
+    - repoURL: https://helm.ngc.nvidia.com/nvidia/nemo-microservices
+      chart: nemo-microservices-helm-chart
+      targetRevision: 25.12.0
+      helm:
+        valueFiles:
+          - $values/k8s/apps/nvidia-safe-synth/values.yaml
+    - repoURL: https://github.com/aerugo/brev-data-platform.git
+      targetRevision: main
+      ref: values
   destination:
     server: https://kubernetes.default.svc
     namespace: nvidia-ai

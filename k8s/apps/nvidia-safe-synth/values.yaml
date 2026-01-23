@@ -1,5 +1,5 @@
 # NVIDIA NeMo Safe Synthesizer Helm Chart Values
-# Based on official NVIDIA documentation:
+# Uses official NVIDIA nemo-microservices-helm-chart from NGC
 # https://docs.nvidia.com/nemo/microservices/latest/generate-private-synthetic-data/
 #
 # TIME-SHARING GPU STRATEGY:
@@ -9,151 +9,94 @@
 # - When safe-synth scales down, nim-llm auto-restarts
 #
 # Usage:
-#   kubectl scale deployment safe-synth -n nvidia-ai --replicas=1  # Enable
-#   kubectl scale deployment safe-synth -n nvidia-ai --replicas=0  # Disable
-#
-# IMPORTANT: Requires NGC secrets applied first:
-#   ./scripts/apply-secrets.sh
+#   kubectl scale deployment nemo-safe-synthesizer -n nvidia-ai --replicas=1  # Enable
+#   kubectl scale deployment nemo-safe-synthesizer -n nvidia-ai --replicas=0  # Disable
 
-# Deployment mode: local (GPU inference) or api-only
-mode: local
+# Only install Safe Synthesizer, not full platform
+tags:
+  platform: false
+  safe-synthesizer: true
 
-# NeMo Safe Synthesizer container from NGC
-image:
-  repository: nvcr.io/nvidia/nemo-microservices/safe-synthesizer
-  tag: "25.12"
-  pullPolicy: IfNotPresent
+# Use existing NGC secrets from nvidia-ai namespace
+existingSecret: ngc-credentials
+existingImagePullSecret: ngc-image-pull
 
-# NGC image pull secret (created by apply-secrets.sh)
-imagePullSecrets:
-  - name: ngc-image-pull
+# Global settings
+global:
+  imagePullSecrets:
+    - name: ngc-image-pull
 
-# Default to 0 - scale up on demand to preempt nim-llm
-replicaCount: 0
+# Safe Synthesizer configuration
+safe-synthesizer:
+  # Default to 0 replicas - scale up on demand
+  replicaCount: 0
 
-# GPU resources - uses full GPU when running (time-sharing, not fractional)
-# Safe Synthesizer requires ~80GB VRAM
-# NIM allocates full GPU memory, so this preempts nim-llm when scaled up
-resources:
-  requests:
-    memory: 32Gi
-    cpu: 4
-    nvidia.com/gpu: 1
-  limits:
-    memory: 64Gi
-    cpu: 8
-    nvidia.com/gpu: 1
+  # Service name matches what Dagster expects
+  serviceName: nemo-safe-synthesizer
 
-# Use NVIDIA RuntimeClass (created by bootstrap-rke2.sh)
-runtimeClassName: nvidia
+  # LLM configuration - use our nim-llm for classification
+  config:
+    # Point to our local NIM LLM service for classification
+    classify_llm_endpoint_url: http://nim-llm.nvidia-ai.svc.cluster.local:8000/v1
+    classify_llm_model_id: meta/llama-3.1-8b-instruct
 
-# KAI Scheduler for GPU workloads
-schedulerName: kai-scheduler
+  # No external API key needed - using local NIM
+  classify:
+    apiKey: "not-needed-local"
 
-# Priority class - batch-high (130) to preempt nim-llm (inference, 125)
-# When scaled up, safe-synth preempts nim-llm for GPU access
-priorityClassName: batch-high
+  # Image pull secrets
+  imagePullSecrets:
+    - name: ngc-image-pull
 
-# KAI Queue assignment - uses batch queue for GPU scheduling
-podLabels:
-  kai.scheduler/queue: batch-queue
-  workload-type: batch
+  # Pod labels for KAI scheduler
+  podLabels:
+    kai.scheduler/queue: batch-queue
+    workload-type: batch
 
-# Tolerations for GPU nodes
-tolerations:
-  - key: nvidia.com/gpu
-    operator: Exists
-    effect: NoSchedule
+  # Pod annotations for KAI GPU memory allocation
+  podAnnotations:
+    kai.scheduler.nvidia.com/gpu-memory: "80Gi"
 
-# Service configuration
-service:
-  type: ClusterIP
-  port: 8080
-  # API Endpoints:
-  # - POST /jobs - Create synthesis job
-  # - GET /jobs - List jobs
-  # - GET /jobs/{job_id} - Get job status
-  # - GET /jobs/{job_id}/results/{result_id}/download - Download results
+  # Service configuration
+  service:
+    type: ClusterIP
+    port: 8000
 
-# NVIDIA API configuration (backup/alternative)
-api:
-  # NVIDIA hosted API endpoint (used if local fails)
-  baseUrl: "https://integrate.api.nvidia.com/v1"
-  # Secret containing NGC API key
-  secretName: ngc-credentials
-  secretKey: api-key
+  # Resource configuration for GPU workloads
+  resources:
+    requests:
+      memory: 32Gi
+      cpu: 4
+    limits:
+      memory: 64Gi
+      cpu: 8
 
-# Environment variables
-env:
-  - name: NGC_API_KEY
-    valueFrom:
-      secretKeyRef:
-        name: ngc-credentials
-        key: api-key
-  - name: LOG_LEVEL
-    value: "INFO"
-  - name: SAFE_SYNTH_MODE
-    value: "local"
-  # Model cache location
-  - name: MODEL_CACHE_PATH
-    value: "/data/models"
+  # Health probes - models take time to load
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 120
+    periodSeconds: 15
+    timeoutSeconds: 10
+    failureThreshold: 10
 
-# ConfigMap for synthesis configuration
-config:
-  # Default job settings
-  defaultJobConfig:
-    # Privacy settings (differential privacy)
-    epsilon: 1.0  # Lower = more privacy, less utility
-    delta: 1e-5
-    piiReplacement: true
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 60
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
 
-    # Generation settings
-    temperature: 0.7
-    maxRecords: 10000
-    batchSize: 100
-
-    # Evaluation settings (privacy attack tests)
-    runMiaEvaluation: true   # Membership Inference Attack
-    runAiaEvaluation: true   # Attribute Inference Attack
-
-# Data persistence for models and job results
-persistence:
+# PostgreSQL for job persistence (included in chart)
+postgresql:
   enabled: true
-  size: 100Gi  # Models + intermediate data + results
-  mountPath: /data
-  accessMode: ReadWriteOnce
-
-# Health probes - models take time to load
-startupProbe:
-  httpGet:
-    path: /health
-    port: 8080
-  initialDelaySeconds: 120
-  periodSeconds: 15
-  failureThreshold: 40  # Allow 10 minutes for model loading
-
-livenessProbe:
-  httpGet:
-    path: /health
-    port: 8080
-  initialDelaySeconds: 30
-  periodSeconds: 15
-
-readinessProbe:
-  httpGet:
-    path: /health
-    port: 8080
-  initialDelaySeconds: 30
-  periodSeconds: 10
-
-# Job configuration for Kubernetes Job-based synthesis
-# When enabled, Safe Synth runs as a Kubernetes Job instead of Deployment
-# Jobs use KAI Scheduler priority-based preemption to acquire GPU from NIM
-job:
-  enabled: false  # Set to true when launching via Dagster
-  runId: ""       # Unique identifier from Dagster run
-  priorityClassName: batch-high  # Value 130 > inference (125) for preemption
-  command: []     # Override container command if needed
-  args: []        # Override container args if needed
-  env: []         # Additional environment variables
-  inputConfigMap: ""  # ConfigMap with input data (optional)
+  auth:
+    postgresPassword: "safe-synth-postgres"
+    database: "safe_synthesizer"
+  primary:
+    persistence:
+      enabled: true
+      size: 10Gi
