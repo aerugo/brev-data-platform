@@ -21,7 +21,7 @@ mode: local
 # NeMo Safe Synthesizer container from NGC
 image:
   repository: nvcr.io/nvidia/nemo-microservices/safe-synthesizer
-  tag: "25.01"
+  tag: "25.12"
   pullPolicy: IfNotPresent
 
 # NGC image pull secret (created by apply-secrets.sh)
