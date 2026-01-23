@@ -4,3 +4,6 @@
 [submodule "dagster"]
 	path = dagster
 	url = https://github.com/aerugo/brev-dagster-pipelines.git
+[submodule "docker/brev-dashboards"]
+	path = docker/brev-dashboards
+	url = https://github.com/aerugo/brev-dashboards.git
