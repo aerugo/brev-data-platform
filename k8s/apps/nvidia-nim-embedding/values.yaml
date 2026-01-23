@@ -1,7 +1,7 @@
 # NVIDIA NIM Embedding Model Configuration
-# Model: llama-3_2-nemoretriever-300m-embed-v2
+# Model: nv-embedqa-e5-v5 (1024 dimensions)
 #
-# This is a 300M parameter embedding model optimized for retrieval.
+# E5-based embedding model optimized for question-answering retrieval.
 # It shares the GPU with the LLM NIM via KAI Scheduler fractional allocation.
 
 # Container image
@@ -48,8 +48,10 @@ podLabels:
 podAnnotations:
   kai.scheduler.nvidia.com/gpu-memory: "2Gi"
 
-# Priority class - same as LLM NIM
-priorityClassName: inference
+# Priority class - preemptible to allow over-quota GPU sharing with LLM NIM
+# Uses build-preemptible (75) instead of inference (125) so it can be
+# preempted if needed, but will run alongside LLM via KAI fractional allocation
+priorityClassName: build-preemptible
 
 # Environment variables
 env:
