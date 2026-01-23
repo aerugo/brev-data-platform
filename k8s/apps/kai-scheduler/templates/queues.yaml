@@ -37,8 +37,9 @@ spec:
       limit: -1
       overQuotaWeight: 1
 ---
-# Inference Queue - For always-on GPU services (NIM)
-# Has full GPU quota, workloads here are non-preemptible by default
+# Inference Queue - For always-on GPU services (NIM LLM and Embedding)
+# Both NIM services share the GPU via KAI fractional allocation
+# Over-quota workloads become preemptible (higher priority preempts lower)
 apiVersion: scheduling.run.ai/v2
 kind: Queue
 metadata:
@@ -56,8 +57,8 @@ spec:
       overQuotaWeight: 1
     gpu:
       quota: 1      # Full GPU quota for inference
-      limit: 1
-      overQuotaWeight: 0  # Cannot go over quota
+      limit: 2      # Allow up to 2 GPU requests (both NIMs)
+      overQuotaWeight: 1  # Over-quota pods are preemptible
     memory:
       quota: 80000000000
       limit: -1

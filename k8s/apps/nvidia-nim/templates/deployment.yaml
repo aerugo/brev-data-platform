@@ -17,6 +17,9 @@ spec:
     metadata:
       labels:
         app: nim-llm
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       {{- with .Values.podAnnotations }}
       annotations:
         {{- toYaml . | nindent 8 }}
@@ -25,6 +28,9 @@ spec:
       # KAI Scheduler for GPU workloads
       {{- if .Values.schedulerName }}
       schedulerName: {{ .Values.schedulerName }}
+      {{- end }}
+      {{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName }}
       {{- end }}
       {{- if .Values.runtimeClassName }}
       runtimeClassName: {{ .Values.runtimeClassName }}
