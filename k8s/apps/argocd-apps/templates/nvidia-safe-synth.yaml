@@ -1,5 +1,8 @@
 # NVIDIA Safe Synthesizer Application - Synthetic Data Generation
 # Sync Wave 3: AI Layer
+#
+# NOTE: ignoreDifferences allows Dagster to scale replicas without ArgoCD reverting.
+# The SafeSynthesizerResource scales 0->1 for synthesis, then back to 0.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -18,6 +21,12 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: nvidia-ai
+  # Allow Dagster to control replica count without ArgoCD reverting
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas
   syncPolicy:
     automated:
       prune: true
