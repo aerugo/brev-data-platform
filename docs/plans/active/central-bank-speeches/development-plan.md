@@ -92,69 +92,92 @@ The platform currently has:
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                           CENTRAL BANK SPEECHES                              │
-│                            DATA PRODUCT FLOW                                 │
+│                    TWO-STAGE SYNTHESIS DATA PRODUCT FLOW                     │
 └─────────────────────────────────────────────────────────────────────────────┘
 
-╔═══════════════════════════════════════════════════════════════════════════╗
-║ PHASE 3: DAGSTER ETL PIPELINE                                              ║
-╠═══════════════════════════════════════════════════════════════════════════╣
-║                                                                            ║
-║  ┌──────────┐     ┌──────────────┐     ┌─────────────────┐                ║
-║  │  Kaggle  │────▶│  raw_speeches │────▶│ versioned_      │                ║
-║  │  Dataset │     │   (MinIO)     │     │ speeches        │                ║
-║  └──────────┘     └──────────────┘     │ (LakeFS main)   │                ║
-║                                         └────────┬────────┘                ║
-║                                                  │                         ║
-║                          ┌───────────────────────┼───────────────────┐     ║
-║                          ▼                       ▼                   ▼     ║
-║              ┌───────────────────┐    ┌─────────────────┐  ┌────────────┐ ║
-║              │ speech_embeddings │    │ tariff_         │  │ enriched_  │ ║
-║              │ (NIM Embedding)   │    │ classification  │  │ speeches   │ ║
-║              │ 1024-dim vectors  │    │ (NIM LLM)       │  │            │ ║
-║              └─────────┬─────────┘    └────────┬────────┘  └─────┬──────┘ ║
-║                        │                       │                  │        ║
-║                        └───────────────────────┴──────────────────┘        ║
-║                                                │                           ║
-║                                                ▼                           ║
-║                      ┌─────────────────────────────────────────┐           ║
-║                      │          speeches_data_product           │           ║
-║                      │         (LakeFS, Parquet format)         │           ║
-║                      └─────────────────────┬───────────────────┘           ║
-║                                            │                               ║
-╚════════════════════════════════════════════╪═══════════════════════════════╝
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║ PHASE 3: ETL + SUMMARIZATION PIPELINE                                          ║
+╠═══════════════════════════════════════════════════════════════════════════════╣
+║                                                                                ║
+║  ┌──────────┐     ┌───────────────┐     ┌─────────────────┐                   ║
+║  │  Kaggle  │────▶│ cleaned_      │────▶│ speech_         │                   ║
+║  │  Dataset │     │ speeches      │     │ summaries       │                   ║
+║  └──────────┘     │ +is_governor  │     │ (GPT-OSS 120B)  │                   ║
+║                   └───────────────┘     │ ~2000 tokens    │                   ║
+║                                          └────────┬────────┘                   ║
+║                                                   │                            ║
+║                          ┌────────────────────────┼────────────────────┐       ║
+║                          ▼                        ▼                    ▼       ║
+║              ┌───────────────────┐    ┌─────────────────┐   ┌────────────────┐║
+║              │ speech_embeddings │    │ tariff_         │   │ enriched_      │║
+║              │ (NIM Embedding)   │    │ classification  │   │ speeches       │║
+║              │ 1024-dim vectors  │    │ (NIM LLM)       │   │ +summary       │║
+║              └─────────┬─────────┘    └────────┬────────┘   │ +is_governor   │║
+║                        │                       │             └────────────────┘║
+║                        └───────────────────────┴─────────────┘                 ║
+║                                                │                               ║
+║                                                ▼                               ║
+║                      ┌─────────────────────────────────────────┐              ║
+║                      │          speeches_data_product          │              ║
+║                      │         (LakeFS, includes summaries)    │              ║
+║                      └─────────────────────┬───────────────────┘              ║
+║                                            │                                   ║
+╚════════════════════════════════════════════╪═══════════════════════════════════╝
                                              │
-╔════════════════════════════════════════════╪═══════════════════════════════╗
-║ PHASE 1: WEAVIATE INFRASTRUCTURE           │                               ║
-╠════════════════════════════════════════════╪═══════════════════════════════╣
-║                                            ▼                               ║
-║                      ┌─────────────────────────────────────────┐           ║
-║                      │            weaviate_index               │           ║
-║                      │       (Vector DB, searchable)           │           ║
-║                      │    Collection: CentralBankSpeeches      │           ║
-║                      └─────────────────────┬───────────────────┘           ║
-║                                            │                               ║
-╚════════════════════════════════════════════╪═══════════════════════════════╝
-                                             │
-╔════════════════════════════════════════════╪═══════════════════════════════╗
-║ PHASE 4: SYNTHETIC DATA PIPELINE           │                               ║
-╠════════════════════════════════════════════╪═══════════════════════════════╣
-║                                            │                               ║
-║  ┌─────────────────────────────────────────┴───────────────────────────┐   ║
-║  │                                                                      │   ║
-║  │  ┌─────────────────┐    ┌────────────────┐    ┌──────────────────┐  │   ║
-║  │  │ synthetic_      │───▶│ synthetic_     │───▶│ synthetic_       │  │   ║
-║  │  │ speeches        │    │ embeddings     │    │ weaviate         │  │   ║
-║  │  │ (Safe Synth)    │    │ (NIM Embedding)│    │ (Separate coll)  │  │   ║
-║  │  └────────┬────────┘    └────────────────┘    └──────────────────┘  │   ║
-║  │           │                                                          │   ║
-║  │           ▼                                                          │   ║
-║  │  ┌─────────────────┐                                                 │   ║
-║  │  │ validation_     │  MIA/AIA reports → LakeFS                       │   ║
-║  │  │ report          │                                                 │   ║
-║  │  └─────────────────┘                                                 │   ║
-║  └──────────────────────────────────────────────────────────────────────┘   ║
-║                                                                             ║
-╚═════════════════════════════════════════════════════════════════════════════╝
+╔════════════════════════════════════════════╪═══════════════════════════════════╗
+║ PHASE 1: WEAVIATE INFRASTRUCTURE           │                                   ║
+╠════════════════════════════════════════════╪═══════════════════════════════════╣
+║                                            ▼                                   ║
+║                      ┌─────────────────────────────────────────┐              ║
+║                      │            weaviate_index               │              ║
+║                      │       (Vector DB, searchable)           │              ║
+║                      │    Collection: CentralBankSpeeches      │              ║
+║                      └─────────────────────────────────────────┘              ║
+║                                                                                ║
+╚════════════════════════════════════════════════════════════════════════════════╝
+
+╔════════════════════════════════════════════════════════════════════════════════╗
+║ PHASE 4: TWO-STAGE SYNTHETIC DATA PIPELINE (DECOUPLED)                          ║
+╠════════════════════════════════════════════════════════════════════════════════╣
+║                                                                                 ║
+║  ┌─────────────────────────────────────────────────────────────────────────┐   ║
+║  │                                                                          │   ║
+║  │  ┌─────────────────┐    ┌────────────────────┐                          │   ║
+║  │  │ load_enriched_  │───▶│ synthetic_summaries │                          │   ║
+║  │  │ data_product    │    │ (Safe Synthesizer)  │                          │   ║
+║  │  │ (from LakeFS)   │    │ Train on: summary,  │                          │   ║
+║  │  │                 │    │ metadata (no text!) │                          │   ║
+║  │  └─────────────────┘    └──────────┬─────────┘                          │   ║
+║  │                                     │                                    │   ║
+║  │                                     ▼                                    │   ║
+║  │                         ┌────────────────────┐                          │   ║
+║  │                         │ synthetic_speeches  │                          │   ║
+║  │                         │ (GPT-OSS expansion) │                          │   ║
+║  │                         │ Summary → Full text │                          │   ║
+║  │                         │ (~4000 chars each)  │                          │   ║
+║  │                         └──────────┬─────────┘                          │   ║
+║  │                                     │                                    │   ║
+║  │                    ┌────────────────┼────────────────┐                  │   ║
+║  │                    ▼                ▼                ▼                  │   ║
+║  │        ┌─────────────────┐ ┌───────────────┐ ┌─────────────────┐       │   ║
+║  │        │ synthetic_      │ │ synthetic_    │ │ synthetic_      │       │   ║
+║  │        │ embeddings      │ │ data_product  │ │ weaviate_index  │       │   ║
+║  │        │ (NIM Embedding) │ │ (LakeFS)      │ │ (Separate coll) │       │   ║
+║  │        └─────────────────┘ └───────────────┘ └─────────────────┘       │   ║
+║  │                                                                          │   ║
+║  │        ┌─────────────────┐                                              │   ║
+║  │        │ validation_     │  MIA/AIA reports → LakeFS                    │   ║
+║  │        │ report          │                                              │   ║
+║  │        └─────────────────┘                                              │   ║
+║  └──────────────────────────────────────────────────────────────────────────┘   ║
+║                                                                                 ║
+║  Key Changes:                                                                   ║
+║  • Decoupled from Phase 3 - loads data product from LakeFS                     ║
+║  • Trains on summaries (~2000 tokens) not full text (~10000 chars)             ║
+║  • Uses GPT-OSS to expand synthetic summaries into full speeches               ║
+║  • Full speeches limited to ~4000 chars for reasonable generation time         ║
+║                                                                                 ║
+╚═════════════════════════════════════════════════════════════════════════════════╝
 
 ╔═════════════════════════════════════════════════════════════════════════════╗
 ║ PHASE 5: MARIMO DASHBOARD                                                   ║
@@ -203,9 +226,9 @@ The platform currently has:
 |-------|-------------|------|--------------|
 | 1 | Weaviate Infrastructure | Kubernetes | Helm chart, ArgoCD app, deployed instance |
 | 2 | NIM Embedding & Resources | Infrastructure + App | NIM embedding Helm chart, Dagster resources |
-| 3 | Central Bank Speeches ETL | Application | Dagster assets, I/O managers, full pipeline |
-| 4 | Synthetic Data Pipeline | Application | Safe Synth integration, KAI preemption, validation |
-| **4.1** | **Safe Synthesizer Fixes** | **Bug Fix** | **Context length fix, single-run training, re-execution** |
+| 3 | Central Bank Speeches ETL + Summarization | Application | Dagster assets with GPT-OSS summaries, is_governor classification |
+| 4 | Two-Stage Synthetic Data Pipeline | Application | Summary-based synthesis, GPT-OSS expansion, decoupled from Phase 3 |
+| **4.1** | **Safe Synthesizer Fixes** | **Superseded** | **Replaced by two-stage approach in Phase 4** |
 | 5 | Marimo Dashboard | Application | Interactive dashboard with vector search |
 
 ---
@@ -279,15 +302,25 @@ The platform currently has:
 
 ---
 
-## Phase 3: Central Bank Speeches ETL Pipeline
+## Phase 3: Central Bank Speeches ETL + Summarization Pipeline
 
-**Goal**: Implement full Dagster pipeline from Kaggle to Weaviate
+**Goal**: Implement full Dagster pipeline from Kaggle to Weaviate, with GPT-OSS summarization
 **Type**: Application
 **Detailed Plan**: [phases/phase-3.md](phases/phase-3.md)
+
+### Key Enhancement: Summary Generation
+
+To work around Safe Synthesizer's 2048 token context limit, Phase 3 now generates ~2000 token summaries of each speech using GPT-OSS (120B model). These summaries are:
+- Stored in the enriched data product for synthetic training
+- Used by Phase 4 instead of full speech text
+- Expandable back to full speeches via GPT-OSS in Phase 4
 
 ### Deliverables
 
 1. `dagster/src/brev_pipelines/assets/central_bank_speeches.py` - Main pipeline assets
+   - **NEW**: `speech_summaries` asset - GPT-OSS summary generation (~2000 tokens each)
+   - **NEW**: `is_governor` column in cleaned_speeches
+   - **UPDATED**: `enriched_speeches` includes summary column
 2. `dagster/src/brev_pipelines/io_managers/lakefs_polars.py` - LakeFS I/O manager
 3. `dagster/src/brev_pipelines/io_managers/weaviate_io.py` - Weaviate I/O manager
 4. `dagster/tests/test_central_bank_speeches.py` - Pipeline tests
@@ -298,47 +331,73 @@ The platform currently has:
 1. `pytest dagster/tests/` all pass
 2. `dagster dev` shows assets in UI
 3. Materialize `raw_speeches` successfully
-4. Full pipeline materializes without errors
-5. Data visible in MinIO, LakeFS, and Weaviate
+4. `speech_summaries` generates ~2000 token summaries
+5. `is_governor` column correctly classifies speakers
+6. Full pipeline materializes without errors
+7. Data product includes `summary` and `is_governor` columns
 
 ### Success Criteria
 
-- [ ] All 7 assets materialize successfully
+- [ ] All assets materialize successfully (including new summary asset)
 - [ ] Data versioned in LakeFS with commits
+- [ ] Summaries are ~2000 tokens each (capturing main message, tone, context)
+- [ ] `is_governor` classification works
 - [ ] Embeddings stored correctly (1024 dimensions)
 - [ ] Tariff classification produces valid 0/1 labels
 - [ ] Vector search works in Weaviate
 
 ---
 
-## Phase 4: Synthetic Data Pipeline
+## Phase 4: Two-Stage Synthetic Data Pipeline
 
-**Goal**: Generate synthetic twin using NVIDIA Safe Synthesizer
+**Goal**: Generate synthetic twin using summary-based training and GPT-OSS expansion
 **Type**: Application
 **Detailed Plan**: [phases/phase-4.md](phases/phase-4.md)
+
+### Key Design: Two-Stage Synthesis
+
+Safe Synthesizer has a hard 2048 token context limit. To generate 10,000+ character synthetic speeches:
+
+1. **Stage 1 - Summary Synthesis**: Train Safe Synthesizer on summaries (~2000 tokens), not full text
+2. **Stage 2 - Speech Expansion**: Use GPT-OSS to expand synthetic summaries into full speeches (~4000 chars)
+
+### Pipeline Decoupling
+
+Phase 4 now loads from the LakeFS data product instead of depending on `enriched_speeches` asset directly. This allows:
+- Running Phase 3 and Phase 4 independently
+- Re-running synthesis without re-processing raw data
+- Creating a master job that runs both pipelines in sequence
 
 ### Deliverables
 
 1. `dagster/src/brev_pipelines/resources/safe_synth.py` - Safe Synthesizer resource
 2. `dagster/src/brev_pipelines/assets/synthetic_speeches.py` - Synthetic pipeline assets
+   - **NEW**: `enriched_data_for_synthesis` - Loads from LakeFS (decoupled)
+   - **RENAMED**: `synthetic_summaries` - Safe Synth trains on summaries
+   - **NEW**: `synthetic_speeches` - GPT-OSS expands summaries to full text
 3. `dagster/tests/test_synthetic_speeches.py` - Pipeline tests
-4. Documentation for GPU switching procedure
+4. `dagster/src/brev_pipelines/jobs.py` - Updated jobs:
+   - `speeches_full_run` - Phase 3 only
+   - `synthetic_full_run` - Phase 4 only (reads from LakeFS)
+   - `full_pipeline_full_run` - Master job running both
 
 ### Validation Approach
 
-1. Safe Synthesizer scales up successfully
-2. NIM scales down without data loss
-3. Synthetic generation job completes
+1. `enriched_data_for_synthesis` loads correctly from LakeFS
+2. `synthetic_summaries` trains on summary column (not text), >0% valid records
+3. `synthetic_speeches` expands summaries to ~4000 char speeches
 4. MIA/AIA reports generated and stored
 5. Synthetic embeddings in separate Weaviate collection
 
 ### Success Criteria
 
+- [ ] Safe Synth trains on summaries with >0% valid record generation
+- [ ] GPT-OSS expands summaries to realistic ~4000 char speeches
 - [ ] Synthetic data generated with privacy guarantees
 - [ ] Validation reports in LakeFS
 - [ ] Separate Weaviate collection created
 - [ ] Vector search works on synthetic data
-- [ ] GPU restored to NIM after completion
+- [ ] Pipelines can run independently or together
 
 ---
 
@@ -446,22 +505,26 @@ After implementation is complete:
 |-------|--------|---------|-----------|-------|
 | Phase 1 | Completed | 2026-01-22 | 2026-01-22 | Weaviate infrastructure deployed |
 | Phase 2 | Completed | 2026-01-22 | 2026-01-23 | NIM Embedding & resources deployed |
-| Phase 3 | Completed | 2026-01-23 | 2026-01-24 | ETL pipeline running, 7721 speeches processed |
-| Phase 4 | Issues Found | 2026-01-24 | - | Execution failed - see Phase 4.1 |
-| Phase 4.1 | **Ready** | 2026-01-24 | - | Fixes applied, ready to re-run |
-| Phase 5 | Pending | | | Marimo dashboard (blocked by Phase 4.1) |
+| Phase 3 | **Needs Update** | 2026-01-23 | - | ETL works, adding GPT-OSS summaries + is_governor |
+| Phase 4 | **Redesigned** | 2026-01-24 | - | Two-stage synthesis: summaries + expansion |
+| Phase 4.1 | Superseded | 2026-01-24 | - | Replaced by two-stage approach |
+| Phase 5 | Pending | | | Marimo dashboard (blocked by Phase 4) |
 
-### Phase 4 Issues Summary
+### Two-Stage Synthesis Approach (NEW)
 
-Phase 4 code was deployed but pipeline execution failed with two critical issues:
+Phase 4 was redesigned due to Safe Synthesizer's hard 2048 token context limit. The new approach:
 
-1. **Context Length Error**: Safe Synthesizer uses 2048 tokens (not 12K with RoPE). Our 8000 char truncation caused 0% valid record generation.
+**Problem**: Safe Synthesizer cannot generate 10,000+ character speeches directly.
 
-2. **Flawed Batching**: Training 8 separate models on 1000-record batches instead of one model on all 7721 records.
+**Solution**: Two-stage synthesis
+1. **Phase 3 Enhancement**: Generate ~2000 token summaries of each speech using GPT-OSS
+2. **Phase 4 Stage 1**: Train Safe Synthesizer on summaries (fits in context!)
+3. **Phase 4 Stage 2**: Expand synthetic summaries into full speeches using GPT-OSS
 
-**Fixes Applied** (in Phase 4.1):
-- Reduced `MAX_TEXT_LENGTH` from 8000 to 2000 chars
-- Removed batch loop (single training run)
-- Updated epsilon from 1.0 to 6.0
+**Additional Changes**:
+- Phase 4 is now **decoupled** - loads from LakeFS data product, can run independently
+- Added `is_governor` column for speaker classification
+- Full synthetic speeches limited to ~4000 chars for reasonable generation time
 
-See [Safe Synthesizer Best Practices Report](../../reports/safe-synthesizer-best-practices.md) for detailed analysis.
+See [Two-Stage Synthesis Implementation Plan](temp/two-stage-synthesis-implementation.md) for details.
+See [Safe Synthesizer Long Text Analysis](../../reports/safe-synthesizer-long-text-analysis.md) for context limit research.
