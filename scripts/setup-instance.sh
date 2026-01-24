@@ -507,10 +507,13 @@ if [ "$HAS_CREDENTIALS" = "true" ]; then
     # LakeFS secrets
     echo "  Creating LakeFS secrets..."
     AUTH_KEY=$(openssl rand -base64 32)
+    # Generate LakeFS credentials once to ensure consistency across all services
+    LAKEFS_ACCESS_KEY_ID="${LAKEFS_ACCESS_KEY_ID:-admin}"
+    LAKEFS_SECRET_ACCESS_KEY="${LAKEFS_SECRET_ACCESS_KEY:-$(openssl rand -base64 32)}"
     kubectl create secret generic lakefs-credentials -n lakefs \
         --from-literal=auth-encrypt-secret-key="$AUTH_KEY" \
-        --from-literal=access-key-id="${LAKEFS_ACCESS_KEY_ID:-admin}" \
-        --from-literal=secret-access-key="${LAKEFS_SECRET_ACCESS_KEY:-$(openssl rand -base64 32)}" \
+        --from-literal=access-key-id="$LAKEFS_ACCESS_KEY_ID" \
+        --from-literal=secret-access-key="$LAKEFS_SECRET_ACCESS_KEY" \
         --from-literal=minio-access-key="$MINIO_ROOT_USER" \
         --from-literal=minio-secret-key="$MINIO_ROOT_PASSWORD" \
         --dry-run=client -o yaml | kubectl apply -f -
@@ -541,8 +544,8 @@ if [ "$HAS_CREDENTIALS" = "true" ]; then
         --from-literal=MINIO_ACCESS_KEY="$MINIO_ROOT_USER" \
         --from-literal=MINIO_SECRET_KEY="$MINIO_ROOT_PASSWORD" \
         --from-literal=LAKEFS_ENDPOINT="http://lakefs.lakefs.svc.cluster.local:8000" \
-        --from-literal=LAKEFS_ACCESS_KEY_ID="${LAKEFS_ACCESS_KEY_ID:-admin}" \
-        --from-literal=LAKEFS_SECRET_ACCESS_KEY="${LAKEFS_SECRET_ACCESS_KEY:-}" \
+        --from-literal=LAKEFS_ACCESS_KEY_ID="$LAKEFS_ACCESS_KEY_ID" \
+        --from-literal=LAKEFS_SECRET_ACCESS_KEY="$LAKEFS_SECRET_ACCESS_KEY" \
         --from-literal=NIM_ENDPOINT="http://nim-llm.nvidia-ai.svc.cluster.local:8000" \
         --from-literal=NGC_API_KEY="${NGC_API_KEY:-}" \
         --dry-run=client -o yaml | kubectl apply -f -
@@ -559,8 +562,8 @@ if [ "$HAS_CREDENTIALS" = "true" ]; then
         --from-literal=MINIO_ACCESS_KEY="$MINIO_ROOT_USER" \
         --from-literal=MINIO_SECRET_KEY="$MINIO_ROOT_PASSWORD" \
         --from-literal=LAKEFS_ENDPOINT="http://lakefs.lakefs.svc.cluster.local:8000" \
-        --from-literal=LAKEFS_ACCESS_KEY_ID="${LAKEFS_ACCESS_KEY_ID:-admin}" \
-        --from-literal=LAKEFS_SECRET_ACCESS_KEY="${LAKEFS_SECRET_ACCESS_KEY:-}" \
+        --from-literal=LAKEFS_ACCESS_KEY_ID="$LAKEFS_ACCESS_KEY_ID" \
+        --from-literal=LAKEFS_SECRET_ACCESS_KEY="$LAKEFS_SECRET_ACCESS_KEY" \
         --dry-run=client -o yaml | kubectl apply -f -
 
     # ArgoCD repo credentials (if GitHub PAT provided)
@@ -573,6 +576,19 @@ if [ "$HAS_CREDENTIALS" = "true" ]; then
             --from-literal=password="$GITHUB_PAT" \
             --dry-run=client -o yaml | kubectl apply -f -
         kubectl label secret repo-credentials -n argocd argocd.argoproj.io/secret-type=repository --overwrite
+    fi
+
+    # ArgoCD NGC Helm repo credentials (if NGC API key provided)
+    if [ -n "$NGC_API_KEY" ]; then
+        echo "  Creating ArgoCD NGC Helm repo credentials..."
+        kubectl create secret generic ngc-helm-repo -n argocd \
+            --from-literal=type=helm \
+            --from-literal=name=nvidia-nemo \
+            --from-literal=url="https://helm.ngc.nvidia.com/nvidia/nemo-microservices" \
+            --from-literal=username='$oauthtoken' \
+            --from-literal=password="$NGC_API_KEY" \
+            --dry-run=client -o yaml | kubectl apply -f -
+        kubectl label secret ngc-helm-repo -n argocd argocd.argoproj.io/secret-type=repository --overwrite
     fi
 
     echo ""
@@ -660,7 +676,65 @@ else
 fi
 
 # =============================================================================
-# Step 16: Final Summary
+# Step 16: Initialize LakeFS
+# =============================================================================
+echo ""
+echo -e "${CYAN}Step 16: Initializing LakeFS...${NC}"
+
+# Wait for LakeFS to be deployed and ready
+echo "Waiting for LakeFS pod to be ready..."
+for i in $(seq 1 60); do
+    if kubectl get pod -n lakefs -l app.kubernetes.io/name=lakefs -o jsonpath='{.items[0].status.phase}' 2>/dev/null | grep -q "Running"; then
+        if kubectl exec -n lakefs deploy/lakefs -- wget -q -O/dev/null http://localhost:8000/api/v1/healthcheck 2>/dev/null; then
+            echo -e "${GREEN}LakeFS is ready!${NC}"
+            break
+        fi
+    fi
+    if [ $i -eq 60 ]; then
+        echo -e "${YELLOW}LakeFS not ready yet - skipping initialization.${NC}"
+        echo "Run this later: kubectl exec -n lakefs deploy/lakefs -- wget -q -O- --post-data=... (see docs)"
+    else
+        echo "  Waiting for LakeFS... ($i/60)"
+        sleep 5
+    fi
+done
+
+# Initialize LakeFS admin user (idempotent - returns 409 if exists)
+if kubectl get pod -n lakefs -l app.kubernetes.io/name=lakefs -o jsonpath='{.items[0].status.phase}' 2>/dev/null | grep -q "Running"; then
+    echo "Setting up LakeFS admin user..."
+    SETUP_RESULT=$(kubectl exec -n lakefs deploy/lakefs -- wget -q -O- \
+        --post-data='{"username":"admin","key":{"access_key_id":"'"$LAKEFS_ACCESS_KEY_ID"'","secret_access_key":"'"$LAKEFS_SECRET_ACCESS_KEY"'"}}' \
+        --header='Content-Type: application/json' \
+        http://localhost:8000/api/v1/setup_lakefs 2>&1 || true)
+
+    if echo "$SETUP_RESULT" | grep -q "access_key_id"; then
+        echo -e "${GREEN}  LakeFS admin user created!${NC}"
+    elif echo "$SETUP_RESULT" | grep -q "409\|already"; then
+        echo "  LakeFS admin user already exists."
+    else
+        echo "  Setup result: $SETUP_RESULT"
+    fi
+
+    # Create data repository (idempotent - returns 409 if exists)
+    echo "Creating LakeFS 'data' repository..."
+    AUTH_HEADER=$(echo -n "$LAKEFS_ACCESS_KEY_ID:$LAKEFS_SECRET_ACCESS_KEY" | base64)
+    REPO_RESULT=$(kubectl exec -n lakefs deploy/lakefs -- wget -q -O- \
+        --post-data='{"name":"data","storage_namespace":"s3://lakefs/data","default_branch":"main"}' \
+        --header='Content-Type: application/json' \
+        --header="Authorization: Basic $AUTH_HEADER" \
+        http://localhost:8000/api/v1/repositories 2>&1 || true)
+
+    if echo "$REPO_RESULT" | grep -q '"id"'; then
+        echo -e "${GREEN}  LakeFS 'data' repository created!${NC}"
+    elif echo "$REPO_RESULT" | grep -q "409\|already exists"; then
+        echo "  LakeFS 'data' repository already exists."
+    else
+        echo "  Repository result: $REPO_RESULT"
+    fi
+fi
+
+# =============================================================================
+# Step 17: Final Summary
 # =============================================================================
 
 # Get credentials for display
@@ -731,7 +805,7 @@ echo "             OpenAI-compatible API (no auth)"
 echo ""
 echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
 echo -e "${CYAN}                   USEFUL COMMANDS                             ${NC}"
-echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
+echo -e "${CYAN}═════════════════════════════════════��═════════════════════════${NC}"
 echo ""
 echo "  make port-forward-all     # Forward all services to localhost"
 echo "  make all-credentials      # Show all service credentials"
