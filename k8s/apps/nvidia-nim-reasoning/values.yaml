@@ -99,6 +99,9 @@ env:
       secretKeyRef:
         name: ngc-credentials
         key: api-key
+  # Model profile for H200 GPU (avoids ambiguous profile selection)
+  - name: NIM_MODEL_PROFILE
+    value: "2dd16f3190c2e0d4250be2b65f8cf8f5acc9429d03aaddfb02e11f889e2973eb"
   # Model cache location
   - name: NIM_CACHE_PATH
     value: "/opt/nim/.cache"
