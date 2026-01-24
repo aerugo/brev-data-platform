@@ -228,12 +228,16 @@ data:
             replicas: 4
 EOF
 
-# Patch device plugin to use the config
-kubectl patch daemonset nvidia-device-plugin-daemonset -n kube-system --type='json' -p='[
-  {"op": "add", "path": "/spec/template/spec/containers/0/args", "value": ["--config-file=/etc/nvidia/config.yaml"]},
-  {"op": "add", "path": "/spec/template/spec/containers/0/volumeMounts/-", "value": {"name": "nvidia-config", "mountPath": "/etc/nvidia"}},
-  {"op": "add", "path": "/spec/template/spec/volumes/-", "value": {"name": "nvidia-config", "configMap": {"name": "nvidia-device-plugin-config", "items": [{"key": "config.yaml", "path": "config.yaml"}]}}}
-]'
+# Patch device plugin to use the config (skip if already patched)
+if ! kubectl get daemonset nvidia-device-plugin-daemonset -n kube-system -o jsonpath='{.spec.template.spec.volumes[*].name}' | grep -q nvidia-config; then
+  kubectl patch daemonset nvidia-device-plugin-daemonset -n kube-system --type='json' -p='[
+    {"op": "add", "path": "/spec/template/spec/containers/0/args", "value": ["--config-file=/etc/nvidia/config.yaml"]},
+    {"op": "add", "path": "/spec/template/spec/containers/0/volumeMounts/-", "value": {"name": "nvidia-config", "mountPath": "/etc/nvidia"}},
+    {"op": "add", "path": "/spec/template/spec/volumes/-", "value": {"name": "nvidia-config", "configMap": {"name": "nvidia-device-plugin-config", "items": [{"key": "config.yaml", "path": "config.yaml"}]}}}
+  ]'
+else
+  echo "Time-slicing patch already applied, skipping..."
+fi
 
 # Wait for device plugin to restart
 echo "Waiting for device plugin to restart with time-slicing config..."
@@ -297,7 +301,7 @@ echo ""
 # =============================================================================
 echo "=== Step 9: Creating namespaces ==="
 
-for ns in argocd minio lakefs dagster marimo nvidia-ai monitoring kube-system; do
+for ns in argocd minio lakefs dagster marimo nvidia-ai monitoring jupyterhub kube-system; do
   kubectl create namespace $ns 2>/dev/null || echo "  Namespace $ns already exists"
 done
 
