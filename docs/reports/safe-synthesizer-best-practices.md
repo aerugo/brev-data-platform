@@ -142,14 +142,14 @@ Our 7721 records are close to this threshold. Single training is essential for:
 
 ---
 
-## 4. Memory Management for Large Datasets
+## 4. Context Window and RoPE Scaling
 
 ### Context Window Constraint (CRITICAL FIX)
 
 From documentation:
 > "All of the data related to a single example must fit inside the context window."
 
-**Important Discovery**: Safe Synthesizer uses **2048 tokens** (TinyLlama base), NOT 12K with RoPE scaling!
+**Important Discovery**: Safe Synthesizer uses **2048 tokens** (TinyLlama base) by default, NOT 12K with RoPE scaling!
 
 From job logs:
 ```
@@ -158,10 +158,73 @@ INFO [model.py:1745] Using max model len 2048
 
 Our original 8000 character truncation (≈2000 tokens) was at or beyond the limit, causing 0% valid generation.
 
-**Fixed**: Reduced to 2000 characters (~500 tokens), leaving room for:
+**Initial Fix**: Reduced to 2000 characters (~500 tokens), leaving room for:
 - Other fields (speech_id, date, central_bank, speaker, title, tariff_mention): ~200 tokens
 - Generation prompt overhead: ~300 tokens
 - Actual text content: ~1000 tokens
+
+### Extending Context with `rope_scaling_factor` (RECOMMENDED IMPROVEMENT)
+
+NVIDIA's documentation reveals the `rope_scaling_factor` parameter that can **extend the context window up to 6×**:
+
+From [Tabular Fine-Tuning Documentation](https://docs.nvidia.com/nemo/microservices/latest/generate-private-synthetic-data/synthesize/tabular-fine-tuning.html):
+
+> "You can increase the `rope_scaling_factor` in order to scale up the context window size (integer between 1 and 6; maximum value is 6). This can be effective, but note that it typically increases the runtime."
+
+#### Context Window Sizes with RoPE Scaling
+
+| `rope_scaling_factor` | Context Window | Max Chars (est.) | Use Case |
+|----------------------|----------------|------------------|----------|
+| 1 (default) | 2,048 tokens | ~2,000 chars | Short text fields |
+| 2 | 4,096 tokens | ~4,000 chars | Medium documents |
+| 4 | 8,192 tokens | ~8,000 chars | Long articles |
+| **6** | **12,288 tokens** | **~12,000 chars** | **Full speeches** |
+
+#### Recommended Configuration for Central Bank Speeches
+
+With `rope_scaling_factor: 6`, we can increase `MAX_TEXT_LENGTH` from 2,000 to **8,000+ characters**:
+
+```python
+# In safe_synth.py training config
+"training": {
+    "pretrained_model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+    "rope_scaling_factor": 6,  # Extend context to ~12K tokens
+    "num_input_records_to_sample": "auto",
+    "max_vram_fraction": 0.6,
+    "batch_size": 1,
+    "gradient_accumulation_steps": 8,
+}
+```
+
+```python
+# In synthetic_speeches.py
+MAX_TEXT_LENGTH = 8000  # Can now use longer text with RoPE scaling
+```
+
+#### Trade-offs
+
+| Aspect | Impact | Mitigation |
+|--------|--------|------------|
+| **Runtime** | Increases with higher factor | Accept for better quality |
+| **Memory** | Higher VRAM usage | Use `max_vram_fraction: 0.5` if needed |
+| **Quality** | Better with more text context | Primary benefit |
+
+#### When to Use RoPE Scaling
+
+From NVIDIA documentation:
+> "The default context length can handle datasets with roughly 50 columns (less if modeling inter-row correlations). Similarly, the default context length can handle event-driven data with sequences up to roughly 20 rows. **To go beyond that, increase `rope_scaling_factor`.**"
+
+Our speeches dataset has:
+- 7 columns (lightweight)
+- 1 text column with long content (heavyweight)
+
+The long `text` field is the primary consumer of context window. RoPE scaling is appropriate.
+
+#### Alternative Approaches (If RoPE Increases Runtime Too Much)
+
+1. **Reduce column names**: Shorten `central_bank` → `bank`, `tariff_mention` → `tariff`
+2. **Truncate more aggressively**: Use 1,500-2,000 chars if context is tight
+3. **Remove columns**: Drop `speech_id` (can regenerate), `title` if redundant with text
 
 ### Training Memory Optimization
 
@@ -300,16 +363,23 @@ Update [safe_synth.py:637](dagster/src/brev_pipelines/resources/safe_synth.py#L6
 
 ### Immediate (Before Next Full Run)
 
-1. [ ] **Stop current job** if still running (it's using flawed approach)
-2. [ ] **Update epsilon** from 1.0 to 6.0 in synthesis config
-3. [ ] **Remove batch loop** in synthetic_speeches.py
+1. [x] **Stop current job** if still running (it's using flawed approach)
+2. [x] **Update epsilon** from 1.0 to 6.0 in synthesis config
+3. [x] **Remove batch loop** in synthetic_speeches.py
 4. [ ] **Test with trial run** (10 records)
+
+### Context Window Enhancement (Implemented)
+
+5. [x] **Add `rope_scaling_factor: 6`** to training config in safe_synth.py
+6. [x] **Increase `MAX_TEXT_LENGTH`** from 2000 to 10000 in synthetic_speeches.py
+7. [ ] **Test with trial run** to verify extended context works
 
 ### Code Changes Required
 
-1. **synthetic_speeches.py**: Remove batch loop, single `synthesize()` call
-2. **safe_synth.py**: Add `num_records` and `use_structured_generation` to config
-3. **jobs.py**: No changes needed (jobs are correct)
+1. **synthetic_speeches.py**: Remove batch loop, single `synthesize()` call ✅
+2. **safe_synth.py**: Add `rope_scaling_factor: 6` to training config ✅
+3. **synthetic_speeches.py**: Update `MAX_TEXT_LENGTH = 10000` ✅
+4. **jobs.py**: No changes needed (jobs are correct)
 
 ### Verification
 
@@ -335,7 +405,7 @@ After implementing changes:
 
 ## Appendix: Full Job Configuration Example
 
-From NVIDIA documentation, a complete synthesis job request:
+From NVIDIA documentation, a complete synthesis job request with RoPE scaling for extended context:
 
 ```json
 {
@@ -351,6 +421,7 @@ From NVIDIA documentation, a complete synthesis job request:
       },
       "training": {
         "pretrained_model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+        "rope_scaling_factor": 6,
         "num_input_records_to_sample": "auto",
         "max_vram_fraction": 0.6,
         "batch_size": 1,
@@ -375,3 +446,13 @@ From NVIDIA documentation, a complete synthesis job request:
   }
 }
 ```
+
+### Key Parameters Explained
+
+| Parameter | Value | Purpose |
+|-----------|-------|---------|
+| `rope_scaling_factor` | 6 | Extends context from 2K to ~12K tokens |
+| `epsilon` | 6.0 | Balanced privacy for large datasets |
+| `num_input_records_to_sample` | "auto" | Use all training data |
+| `max_vram_fraction` | 0.6 | Leave GPU memory for evaluation |
+| `use_structured_generation` | true | Better JSON/tabular output quality |

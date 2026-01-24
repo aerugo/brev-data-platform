@@ -29,9 +29,11 @@ Percentage of records that are valid: 0.00%
 🛑 Stopping generation prematurely. No valid records were generated due to model underfitting.
 ```
 
-**Root Cause**: Safe Synthesizer uses TinyLlama's **base 2048 token context**, not 12K with RoPE scaling. Our 8000 character truncation (≈2000 tokens) exceeded the context limit, causing generation failures.
+**Root Cause**: Safe Synthesizer uses TinyLlama's **base 2048 token context** by default. Our 8000 character truncation (≈2000 tokens) exceeded the context limit, causing generation failures.
 
-**Fix Applied**: Reduced `MAX_TEXT_LENGTH` from 8000 to 2000 characters in [synthetic_speeches.py](../../../../../dagster/src/brev_pipelines/assets/synthetic_speeches.py).
+**Fix Applied**:
+1. Added `rope_scaling_factor: 6` in [safe_synth.py](../../../../../dagster/src/brev_pipelines/resources/safe_synth.py) to extend context to ~12K tokens
+2. Updated `MAX_TEXT_LENGTH` to 10000 characters in [synthetic_speeches.py](../../../../../dagster/src/brev_pipelines/assets/synthetic_speeches.py)
 
 ### Issue 2: Flawed Batching Architecture
 
@@ -67,7 +69,8 @@ This caused:
 
 | File | Change | Rationale |
 |------|--------|-----------|
-| [synthetic_speeches.py](../../../../../dagster/src/brev_pipelines/assets/synthetic_speeches.py) | `MAX_TEXT_LENGTH = 2000` | Fit within 2048 token context |
+| [safe_synth.py](../../../../../dagster/src/brev_pipelines/resources/safe_synth.py) | `rope_scaling_factor: 6` | Extend context to ~12K tokens |
+| [synthetic_speeches.py](../../../../../dagster/src/brev_pipelines/assets/synthetic_speeches.py) | `MAX_TEXT_LENGTH = 10000` | Allow longer speech text (with RoPE scaling) |
 | [synthetic_speeches.py](../../../../../dagster/src/brev_pipelines/assets/synthetic_speeches.py) | Removed batch loop | Train once on all data |
 | [synthetic_speeches.py](../../../../../dagster/src/brev_pipelines/assets/synthetic_speeches.py) | `epsilon: 6.0` | Better quality for large dataset |
 | [synthetic_speeches.py](../../../../../dagster/src/brev_pipelines/assets/synthetic_speeches.py) | Updated evaluation handling | Single result (no aggregation) |
@@ -76,14 +79,21 @@ This caused:
 
 ```python
 # BEFORE (Flawed)
-MAX_TEXT_LENGTH = 8000  # Too long for context
+MAX_TEXT_LENGTH = 8000  # Too long for 2048 token context
 batch_size = 1000
 for i in range(0, len(data_for_synthesis), batch_size):
     batch = data_for_synthesis[i : i + batch_size]
     safe_synth.synthesize(batch, config={"epsilon": 1.0, ...})
 
-# AFTER (Fixed)
-MAX_TEXT_LENGTH = 2000  # Safe for 2048 token context
+# AFTER (Fixed with RoPE scaling)
+# In safe_synth.py:
+"training": {
+    "rope_scaling_factor": 6,  # Extends context to ~12K tokens
+    ...
+}
+
+# In synthetic_speeches.py:
+MAX_TEXT_LENGTH = 10000  # Now fits in extended context
 safe_synth.synthesize(data_for_synthesis, config={"epsilon": 6.0, ...})
 ```
 
@@ -96,9 +106,13 @@ safe_synth.synthesize(data_for_synthesis, config={"epsilon": 6.0, ...})
 **Action**: Verify code changes
 
 ```bash
+# Check RoPE scaling in safe_synth.py
+grep -n "rope_scaling_factor" dagster/src/brev_pipelines/resources/safe_synth.py
+# Expected: "rope_scaling_factor": 6
+
 # Check text truncation
 grep -n "MAX_TEXT_LENGTH" dagster/src/brev_pipelines/assets/synthetic_speeches.py
-# Expected: MAX_TEXT_LENGTH = 2000
+# Expected: MAX_TEXT_LENGTH = 10000
 
 # Check no batch loop
 grep -n "batch_size" dagster/src/brev_pipelines/assets/synthetic_speeches.py
@@ -194,7 +208,7 @@ In Dagster UI:
 Expected log messages:
 ```
 Training on 7721 records (single run, no batching)
-Text truncated to 2000 chars to fit 2048 token context
+Text truncated to 10000 chars (RoPE scaling factor 6 = ~12K token context)
 ...
 Training 100.0% complete
 ...
@@ -226,7 +240,8 @@ lakectl fs cat lakefs://data/main/central-bank-speeches/synthetic/validation_rep
 ## Validation Checklist
 
 ### Code Fixes
-- [x] `MAX_TEXT_LENGTH` reduced to 2000
+- [x] `rope_scaling_factor: 6` added to safe_synth.py training config
+- [x] `MAX_TEXT_LENGTH` updated to 10000 (with RoPE scaling)
 - [x] Batch loop removed (single `synthesize()` call)
 - [x] Epsilon updated to 6.0
 - [x] Evaluation handling updated for single run
@@ -264,10 +279,11 @@ lakectl fs cat lakefs://data/main/central-bank-speeches/synthetic/validation_rep
 If the fixed pipeline still fails:
 
 1. Check logs for new error messages
-2. If context still too long: reduce `MAX_TEXT_LENGTH` further (try 1500 or 1000)
-3. If CUDA OOM: reduce `max_vram_fraction` in safe_synth.py
-4. If training too slow: consider using `num_input_records_to_sample` to subsample training data
-5. Restore NIM: `kubectl scale deployment nvidia-nim-llm -n nvidia-nim --replicas=1`
+2. If context still too long: reduce `MAX_TEXT_LENGTH` (try 8000, 6000, or 4000)
+3. If RoPE scaling causes issues: reduce `rope_scaling_factor` from 6 to 4 or 2
+4. If CUDA OOM: reduce `max_vram_fraction` in safe_synth.py (try 0.5 or 0.4)
+5. If training too slow: consider using `num_input_records_to_sample` to subsample training data
+6. Restore NIM: `kubectl scale deployment nvidia-nim-llm -n nvidia-nim --replicas=1`
 
 ---
 
