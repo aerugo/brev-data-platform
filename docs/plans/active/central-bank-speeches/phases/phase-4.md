@@ -1,9 +1,17 @@
 # Phase 4: Synthetic Data Pipeline
 
-**Status**: Pending
+**Status**: Issues Discovered - See Phase 4.1
 **Type**: Application
-**Started**:
+**Started**: 2026-01-24
+**Completed**: Partial (code deployed, execution failed)
 **Parent Plan**: [development-plan.md](../development-plan.md)
+
+> **IMPORTANT**: This phase was executed but failed due to two critical issues:
+> 1. **Context length error**: 8000 char truncation exceeded TinyLlama's 2048 token context
+> 2. **Flawed batching**: Training 8 separate models instead of one on all data
+>
+> Fixes are documented and applied in [Phase 4.1](phase-4.1.md).
+> See [Safe Synthesizer Best Practices Report](../../../reports/safe-synthesizer-best-practices.md) for full analysis.
 
 ---
 

@@ -205,6 +205,7 @@ The platform currently has:
 | 2 | NIM Embedding & Resources | Infrastructure + App | NIM embedding Helm chart, Dagster resources |
 | 3 | Central Bank Speeches ETL | Application | Dagster assets, I/O managers, full pipeline |
 | 4 | Synthetic Data Pipeline | Application | Safe Synth integration, KAI preemption, validation |
+| **4.1** | **Safe Synthesizer Fixes** | **Bug Fix** | **Context length fix, single-run training, re-execution** |
 | 5 | Marimo Dashboard | Application | Interactive dashboard with vector search |
 
 ---
@@ -443,8 +444,24 @@ After implementation is complete:
 
 | Phase | Status | Started | Completed | Notes |
 |-------|--------|---------|-----------|-------|
-| Phase 1 | Pending | | | Weaviate infrastructure |
-| Phase 2 | Pending | | | Resources and dependencies |
-| Phase 3 | Pending | | | Main ETL pipeline |
-| Phase 4 | Pending | | | Synthetic data generation |
-| Phase 5 | Pending | | | Marimo dashboard |
+| Phase 1 | Completed | 2026-01-22 | 2026-01-22 | Weaviate infrastructure deployed |
+| Phase 2 | Completed | 2026-01-22 | 2026-01-23 | NIM Embedding & resources deployed |
+| Phase 3 | Completed | 2026-01-23 | 2026-01-24 | ETL pipeline running, 7721 speeches processed |
+| Phase 4 | Issues Found | 2026-01-24 | - | Execution failed - see Phase 4.1 |
+| Phase 4.1 | **Ready** | 2026-01-24 | - | Fixes applied, ready to re-run |
+| Phase 5 | Pending | | | Marimo dashboard (blocked by Phase 4.1) |
+
+### Phase 4 Issues Summary
+
+Phase 4 code was deployed but pipeline execution failed with two critical issues:
+
+1. **Context Length Error**: Safe Synthesizer uses 2048 tokens (not 12K with RoPE). Our 8000 char truncation caused 0% valid record generation.
+
+2. **Flawed Batching**: Training 8 separate models on 1000-record batches instead of one model on all 7721 records.
+
+**Fixes Applied** (in Phase 4.1):
+- Reduced `MAX_TEXT_LENGTH` from 8000 to 2000 chars
+- Removed batch loop (single training run)
+- Updated epsilon from 1.0 to 6.0
+
+See [Safe Synthesizer Best Practices Report](../../reports/safe-synthesizer-best-practices.md) for detailed analysis.
