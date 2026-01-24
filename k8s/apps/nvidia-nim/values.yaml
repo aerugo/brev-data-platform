@@ -46,7 +46,7 @@ resources:
 # Use NVIDIA RuntimeClass (created by bootstrap-rke2.sh)
 runtimeClassName: nvidia
 
-# KAI Scheduler for GPU workloads (Phase 3.5)
+# KAI Scheduler for GPU workloads
 # Enables fractional GPU, gang scheduling, and topology-aware placement
 schedulerName: kai-scheduler
 

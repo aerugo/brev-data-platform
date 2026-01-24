@@ -13,10 +13,10 @@ Interactive vector search dashboard for exploring central bank speeches using se
 
 Before running this dashboard, ensure:
 
-1. **Weaviate** is running with indexed speeches (Phase 3 pipeline completed)
+1. **Weaviate** is running with indexed speeches (ETL pipeline completed)
 2. **NIM Embedding** service is running for query embeddings
 3. **LakeFS** has the data products stored
-4. For synthetic data toggle: Phase 4 pipeline completed
+4. For synthetic data toggle: synthesis pipeline completed
 
 ## Running the Dashboard
 

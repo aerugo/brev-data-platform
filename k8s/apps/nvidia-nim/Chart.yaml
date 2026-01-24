@@ -11,8 +11,6 @@ appVersion: "1.15.4"
 # - A100 (80GB): INSUFFICIENT - cannot support dual-model setup
 # - T4/A10G: NOT SUPPORTED - too small for production workloads
 #
-# See docs/plans/active/grand_plan/phases/phase-7-nvidia-ai.md for details
-#
 # Official nim-llm chart can be fetched from NGC:
 # helm fetch https://helm.ngc.nvidia.com/nim/charts/nim-llm-1.15.4.tgz \
 #   --username='$oauthtoken' --password=$NGC_API_KEY
