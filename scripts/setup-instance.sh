@@ -193,7 +193,7 @@ check_stack_status() {
 
             # Check KAI Scheduler
             if ssh -F "$SSH_CONFIG" "${INSTANCE_NAME}-host" "sudo /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get ns kai-scheduler" &>/dev/null; then
-                kai_pods=$(ssh -F "$SSH_CONFIG" "${INSTANCE_NAME}-host" "sudo /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get pods -n kai-scheduler --no-headers 2>/dev/null | grep -c Running" || echo "0")
+                kai_pods=$(ssh -F "$SSH_CONFIG" "${INSTANCE_NAME}-host" "sudo /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get pods -n kai-scheduler --no-headers 2>/dev/null | grep -c Running" | tr -d '[:space:]' || echo "0")
                 if [ "$kai_pods" -gt 0 ]; then
                     kai_status="running ($kai_pods pods)"
                 else
@@ -203,12 +203,12 @@ check_stack_status() {
 
             # Check ArgoCD
             if ssh -F "$SSH_CONFIG" "${INSTANCE_NAME}-host" "sudo /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get ns argocd" &>/dev/null; then
-                argocd_pods=$(ssh -F "$SSH_CONFIG" "${INSTANCE_NAME}-host" "sudo /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get pods -n argocd --no-headers 2>/dev/null | grep -c Running" || echo "0")
+                argocd_pods=$(ssh -F "$SSH_CONFIG" "${INSTANCE_NAME}-host" "sudo /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get pods -n argocd --no-headers 2>/dev/null | grep -c Running" | tr -d '[:space:]' || echo "0")
                 if [ "$argocd_pods" -gt 0 ]; then
                     argocd_status="running ($argocd_pods pods)"
 
                     # Check deployed apps
-                    app_count=$(ssh -F "$SSH_CONFIG" "${INSTANCE_NAME}-host" "sudo /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get applications -n argocd --no-headers 2>/dev/null | wc -l" || echo "0")
+                    app_count=$(ssh -F "$SSH_CONFIG" "${INSTANCE_NAME}-host" "sudo /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get applications -n argocd --no-headers 2>/dev/null | wc -l" | tr -d '[:space:]' || echo "0")
                     if [ "$app_count" -gt 0 ]; then
                         apps_status="$app_count apps"
                     fi
@@ -508,9 +508,11 @@ if [ "$HAS_CREDENTIALS" = "true" ]; then
     echo "  Creating LakeFS secrets..."
     AUTH_KEY=$(openssl rand -base64 32)
     kubectl create secret generic lakefs-credentials -n lakefs \
-        --from-literal=auth_encrypt_secret_key="$AUTH_KEY" \
+        --from-literal=auth-encrypt-secret-key="$AUTH_KEY" \
         --from-literal=access-key-id="${LAKEFS_ACCESS_KEY_ID:-admin}" \
         --from-literal=secret-access-key="${LAKEFS_SECRET_ACCESS_KEY:-$(openssl rand -base64 32)}" \
+        --from-literal=minio-access-key="$MINIO_ROOT_USER" \
+        --from-literal=minio-secret-key="$MINIO_ROOT_PASSWORD" \
         --dry-run=client -o yaml | kubectl apply -f -
 
     kubectl create secret generic minio-credentials -n lakefs \
@@ -543,6 +545,11 @@ if [ "$HAS_CREDENTIALS" = "true" ]; then
         --from-literal=LAKEFS_SECRET_ACCESS_KEY="${LAKEFS_SECRET_ACCESS_KEY:-}" \
         --from-literal=NIM_ENDPOINT="http://nim-llm.nvidia-ai.svc.cluster.local:8000" \
         --from-literal=NGC_API_KEY="${NGC_API_KEY:-}" \
+        --dry-run=client -o yaml | kubectl apply -f -
+
+    # NDS credentials (for NeMo Data Store access, optional)
+    kubectl create secret generic nds-credentials -n dagster \
+        --from-literal=NDS_TOKEN="${HF_TOKEN:-}" \
         --dry-run=client -o yaml | kubectl apply -f -
 
     # JupyterHub secrets (for user notebook environment)
