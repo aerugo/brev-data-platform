@@ -1,7 +1,9 @@
 {{- /*
 LakeFS Setup Job - Automatically initializes admin user on first deployment.
-This job runs as a Helm post-install hook and is idempotent (setup API returns
+This job runs as an ArgoCD PostSync hook and is idempotent (setup API returns
 error if already initialized, which we ignore).
+
+Uses ArgoCD resource hooks (not Helm hooks) for GitOps compatibility.
 */ -}}
 apiVersion: batch/v1
 kind: Job
@@ -12,9 +14,9 @@ metadata:
     app.kubernetes.io/name: lakefs-setup
     app.kubernetes.io/instance: {{ .Release.Name }}
   annotations:
-    "helm.sh/hook": post-install,post-upgrade
-    "helm.sh/hook-weight": "1"
-    "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
+    # ArgoCD resource hooks (runs after sync completes)
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
 spec:
   ttlSecondsAfterFinished: 300
   template:
