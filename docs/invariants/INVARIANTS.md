@@ -105,10 +105,10 @@ brev shell instance && apt install something  # NEVER
 ```
 
 **Exceptions that require documentation:**
-- Phase 0 prerequisites (account creation, API key generation) - documented in phase-0.md
-- Initial Age key generation - documented in phase-2.md
-- Brev instance creation via web console (H200 GPU not available via CLI) - documented in phase-3.md
-- GitHub repository secrets - documented in phase-10.md
+- Account creation and API key generation (one-time setup)
+- Initial Age key generation for SOPS encryption
+- Brev instance creation via web console (H200 GPU not available via CLI)
+- GitHub repository secrets configuration
 
 **Rationale**: Manual configuration creates drift, is not reproducible, cannot be audited, and will be lost on rebuild.
 
@@ -549,6 +549,111 @@ env:
 - Compliance and audit trails
 - Quality assurance of AI-generated content
 
+### INV-N006: Safe Synthesizer Context Limit
+
+Input records for Safe Synthesizer must fit within TinyLlama's context window. With `rope_scaling_factor=6`, max context is ~12K tokens (~10K characters per record). Full speech text (~20K+ chars) **cannot** be synthesized directly.
+
+```python
+# Correct - synthesize compact data that fits in context
+synthesis_columns = [
+    "reference", "date", "central_bank", "speaker", "title",  # metadata
+    "monetary_stance", "trade_stance", "economic_outlook",     # classifications
+    "summary",  # ~1000 chars - fits in context
+]
+# Total per record: ~1500 chars
+
+# Incorrect - will cause underfitting or invalid output
+synthesis_columns = ["reference", "text"]  # text is ~20K chars - TOO LONG
+```
+
+**Rationale**: TinyLlama (1.1B parameters) has a 2K base context window. RoPE scaling extends this to ~12K tokens, but synthesizing very long text fields causes:
+- Underfitting (model can't learn the distribution)
+- Invalid JSON output (truncated records)
+- Extremely slow training
+
+### INV-N007: Safe Synthesizer GPU Preemption
+
+Safe Synthesizer must use `batch-high` priority (130) to preempt NIM inference pods (priority 125). After synthesis completes, scale deployment back to 0 replicas to release GPU for NIM.
+
+```yaml
+# Safe Synthesizer deployment
+priorityClassName: batch-high  # 130 - preempts inference (125)
+```
+
+```python
+# Correct - automatic scale up/down in Dagster resource
+def synthesize(self, ...):
+    self._scale_deployment(replicas=1)   # KAI preempts NIM
+    try:
+        return self._synthesize_via_api(...)
+    finally:
+        self._scale_deployment(replicas=0)  # NIM auto-restarts
+
+# Incorrect - leaving Safe Synth running blocks NIM
+# Never leave Safe Synthesizer at replicas=1 after job completion
+```
+
+**Rationale**: Safe Synthesizer requires ~80GB GPU memory. NIM and Safe Synth cannot run concurrently on H200 (141GB) when both need full GPU. Priority-based preemption via KAI Scheduler enables time-sharing.
+
+### INV-N008: Synthetic Data Isolation
+
+Synthetic data must be stored separately from real data to prevent confusion and maintain data lineage:
+
+```python
+# Correct - separate collections and paths
+REAL_COLLECTION = "CentralBankSpeeches"
+SYNTHETIC_COLLECTION = "SyntheticSpeeches"  # Separate collection
+
+real_path = "central-bank-speeches/speeches.parquet"
+synthetic_path = "central-bank-speeches/synthetic/speeches.parquet"  # /synthetic/ subdirectory
+
+# All synthetic records must have marker
+synthetic_df = df.with_columns(pl.lit(True).alias("is_synthetic"))
+
+# Incorrect - mixing real and synthetic
+collection = "AllSpeeches"  # NEVER mix real and synthetic
+synthetic_df = df  # Missing is_synthetic marker
+```
+
+**Rationale**: Mixing synthetic and real data:
+- Corrupts analytics and ML training
+- Violates data governance requirements
+- Makes lineage tracking impossible
+- Can lead to "model collapse" if synthetic data is used to train future models
+
+### INV-N009: Privacy Evaluation Required
+
+All Safe Synthesizer jobs must enable MIA (Membership Inference Attack) and AIA (Attribute Inference Attack) evaluation. Privacy scores must be logged and stored with synthetic data products.
+
+```python
+# Correct - privacy evaluation enabled
+synth_config = {
+    "evaluation": {
+        "mia_enabled": True,
+        "aia_enabled": True,
+    },
+}
+# Store evaluation results
+report = {
+    "mia_score": evaluation.get("mia_score"),
+    "aia_score": evaluation.get("aia_score"),
+    "privacy_passed": evaluation.get("privacy_passed"),
+}
+
+# Incorrect - skipping privacy evaluation
+synth_config = {
+    "evaluation": {
+        "mia_enabled": False,  # NEVER for production
+        "aia_enabled": False,  # NEVER for production
+    },
+}
+```
+
+**Rationale**: Synthetic data without privacy evaluation may:
+- Leak sensitive information from training data
+- Fail compliance requirements (GDPR, HIPAA)
+- Be indistinguishable from real data (privacy failure)
+
 ---
 
 ## Adding New Invariants
@@ -576,4 +681,4 @@ When discovering new architectural constraints:
 ---
 
 *Created: 2026-01-21*
-*Last Updated: 2026-01-23*
+*Last Updated: 2026-01-24*
