@@ -61,10 +61,11 @@ podLabels:
 # When scaled up, nim-reasoning preempts nim-llm for GPU access
 priorityClassName: batch-high
 
-# KAI Scheduler annotations for fractional GPU allocation
-# Requests 80GB of GPU memory for GPT-OSS-120B
+# KAI Scheduler annotations for GPU allocation
+# GPT-OSS-120B needs full GPU access for NIM profile detection
+# H200 has 141GB; request full capacity so NIM sees the complete GPU
 podAnnotations:
-  kai.scheduler.nvidia.com/gpu-memory: "80Gi"
+  kai.scheduler.nvidia.com/gpu-memory: "141Gi"
 
 # Tolerations for GPU nodes
 tolerations:
@@ -99,9 +100,10 @@ env:
       secretKeyRef:
         name: ngc-credentials
         key: api-key
-  # Model profile for H200 GPU (avoids ambiguous profile selection)
+  # Force single-GPU TP=1 profile for H200 (vllm-mxfp4-tp1-pp1)
+  # This profile uses vLLM backend with MXFP4 quantization on 1 GPU
   - name: NIM_MODEL_PROFILE
-    value: "2dd16f3190c2e0d4250be2b65f8cf8f5acc9429d03aaddfb02e11f889e2973eb"
+    value: "fc1df044c94b466d0ebd561df47556bc23a01ac8147d68dc49f04238a6cfcd7f"
   # Model cache location
   - name: NIM_CACHE_PATH
     value: "/opt/nim/.cache"
