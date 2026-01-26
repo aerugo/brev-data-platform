@@ -47,6 +47,7 @@ SECRETS=(
     "k8s/apps/minio/secrets/secrets.enc.yaml:minio"
     "k8s/apps/lakefs/secrets/secrets.enc.yaml:lakefs"
     "k8s/apps/nvidia-ai/secrets/secrets.enc.yaml:nvidia-ai"
+    "k8s/apps/nvidia-nim-embedding/secrets/secrets.enc.yaml:nvidia-nim"
     "k8s/apps/argocd-apps/secrets/secrets.enc.yaml:argocd"
     "k8s/apps/dagster/secrets/secrets.enc.yaml:dagster"
     "k8s/apps/jupyterhub/secrets/secrets.enc.yaml:jupyterhub"
