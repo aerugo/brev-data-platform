@@ -112,6 +112,39 @@ brev shell instance && apt install something  # NEVER
 
 **Rationale**: Manual configuration creates drift, is not reproducible, cannot be audited, and will be lost on rebuild.
 
+### INV-I006: Local-Only Infrastructure (No Cloud APIs)
+
+This platform operates on a **strict local-only policy**. All services must run on our own infrastructure - NEVER use external cloud APIs or services.
+
+```python
+# Correct - local NIM endpoint
+nim_provider = OpenAIProvider(
+    base_url="http://nvidia-nim.nvidia-nim.svc.cluster.local:8000/v1",
+    api_key="not-required",  # Local NIM doesn't require API key
+)
+
+# FORBIDDEN - cloud LLM APIs
+OpenAI(api_key=os.environ["OPENAI_API_KEY"])  # NEVER
+Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])  # NEVER
+OpenAIProvider(base_url="https://integrate.api.nvidia.com/v1", ...)  # NEVER
+OpenAIProvider(base_url="https://api.openai.com/v1", ...)  # NEVER
+```
+
+**Forbidden cloud services:**
+- OpenAI API (GPT-4, etc.)
+- Anthropic API (Claude)
+- NVIDIA Cloud API (integrate.api.nvidia.com)
+- Google Vertex AI
+- AWS Bedrock
+- Azure OpenAI
+- Any external embedding or LLM service
+
+**Rationale**:
+- Data sovereignty - sensitive data never leaves our infrastructure
+- Cost control - no per-token API charges
+- Latency - local inference is faster than cloud round-trips
+- Availability - no external dependencies for core functionality
+
 ---
 
 ## Kubernetes Invariants (INV-K)
@@ -444,6 +477,367 @@ def clean_data(raw_data):  # Missing types
 
 **Rationale**: Type annotations enable Dagster's type checking and documentation.
 
+### INV-P004: Complete Type Annotations on All Functions
+
+Every function, method, and asset must have **complete** type annotations for all parameters AND return types. No exceptions.
+
+```python
+# Correct - complete annotations
+def process_speeches(
+    speeches: list[Speech],
+    batch_size: int = 32,
+) -> tuple[pl.DataFrame, list[list[float]]]:
+    ...
+
+def get_embedding(text: str) -> list[float]:
+    return embedder.embed(text)
+
+# Incorrect - missing return type
+def get_embedding(text: str):  # NEVER - missing return type
+    return embedder.embed(text)
+
+# Incorrect - missing parameter types
+def process_speeches(speeches, batch_size=32):  # NEVER
+    ...
+```
+
+**Rationale**: Complete type annotations enable static analysis, IDE support, and catch bugs before runtime. Partial annotations provide false confidence.
+
+### INV-P005: No `Any` Types
+
+Never use `typing.Any`. Replace with proper types using Pydantic models, TypedDict, or specific type unions.
+
+```python
+# Correct - use Pydantic models
+from pydantic import BaseModel
+
+class ProcessResult(BaseModel):
+    status: str
+    count: int
+    items: list[SpeechDict]
+
+def process(data: SpeechRecord) -> ProcessResult:
+    ...
+
+# Correct - use TypedDict for dict shapes
+from typing import TypedDict
+
+class EmbeddingResult(TypedDict):
+    reference: str
+    embedding: list[float]
+
+def get_embeddings(texts: list[str]) -> list[EmbeddingResult]:
+    ...
+
+# Incorrect - leaks unknown types
+from typing import Any
+
+def process(data: dict[str, Any]) -> Any:  # NEVER
+    ...
+
+def get_result() -> dict[str, Any]:  # NEVER
+    ...
+```
+
+**Rationale**: `Any` defeats the purpose of type checking. It propagates through the codebase and hides bugs that would otherwise be caught statically.
+
+### INV-P006: Modern Python 3.11+ Typing Syntax
+
+Use native Python type syntax. Never import `List`, `Dict`, `Optional`, `Union`, `Tuple`, or `Set` from `typing`.
+
+```python
+# Correct - modern syntax
+def func(items: list[str]) -> dict[str, int | None]:
+    ...
+
+def find_speech(id: str) -> Speech | None:
+    ...
+
+def parse(val: str) -> int | str:
+    ...
+
+# Incorrect - legacy imports
+from typing import List, Dict, Optional, Union  # NEVER
+
+def func(items: List[str]) -> Dict[str, Optional[int]]:  # NEVER
+    ...
+```
+
+**Allowed typing imports:**
+- `Protocol`, `runtime_checkable` - for interfaces
+- `TypedDict` - for dict shapes
+- `Annotated` - for metadata (Pydantic, Dagster)
+- `TypeVar`, `Generic` - for generic classes
+- `Callable` - for function types
+- `Self` - for method return types
+- `Literal` - for literal types
+
+**Rationale**: Modern syntax is more readable and is the Python standard. Legacy imports add noise and will eventually be deprecated.
+
+### INV-P007: Pydantic v2 for Data Models
+
+All structured data must use Pydantic v2 models with proper Field definitions and validators.
+
+```python
+# Correct - Pydantic v2 model
+from pydantic import BaseModel, Field, field_validator
+
+class Speech(BaseModel):
+    """A central bank speech record."""
+
+    speech_id: str = Field(..., description="Unique identifier")
+    title: str = Field(..., min_length=1)
+    text: str = Field(..., min_length=10)
+    central_bank: str = Field(..., description="Issuing institution")
+    monetary_stance: int = Field(default=3, ge=1, le=5)
+    tariff_mention: bool = Field(default=False)
+
+    @field_validator("central_bank")
+    @classmethod
+    def normalize_bank(cls, v: str) -> str:
+        return v.strip().upper()
+
+# Incorrect - plain dict or dataclass without validation
+speech = {
+    "speech_id": "123",
+    "title": "",  # Invalid but not caught
+    "text": "x",  # Too short but not caught
+}
+```
+
+**Rationale**: Pydantic provides:
+- Runtime validation with clear error messages
+- Automatic serialization/deserialization
+- Schema generation for documentation
+- Integration with Dagster ConfigurableResource
+
+### INV-P008: PydanticAI for All LLM Processing
+
+**All LLM calls must use PydanticAI with strictly-typed Pydantic response models.** Never use raw LLM APIs or manual JSON parsing.
+
+**CRITICAL: Local-Only Policy** - This platform uses ONLY local LLMs deployed via NVIDIA NIM on our own infrastructure. We NEVER use cloud LLM APIs (OpenAI, Anthropic, NVIDIA Cloud, etc.). All inference runs on our H200 GPU.
+
+#### Configuration with NVIDIA NIM (Local Deployment)
+
+NVIDIA NIM provides an OpenAI-compatible API. Configure PydanticAI using `OpenAIChatModel` with `OpenAIProvider`:
+
+```python
+from pydantic import BaseModel, Field
+from pydantic_ai import Agent
+from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.providers.openai import OpenAIProvider
+from typing import Literal
+
+# Configure for local NVIDIA NIM (OpenAI-compatible API)
+nim_provider = OpenAIProvider(
+    base_url="http://nvidia-nim.nvidia-nim.svc.cluster.local:8000/v1",
+    api_key="not-required",  # Local NIM doesn't require API key
+)
+
+nim_model = OpenAIChatModel(
+    model_name="meta/llama3-8b-instruct",
+    provider=nim_provider,
+)
+
+# Define strictly-typed response model
+class TariffClassification(BaseModel):
+    """Structured classification result - all fields strictly typed."""
+
+    mentions_tariff: bool = Field(
+        description="Whether the speech discusses tariffs or trade barriers"
+    )
+    confidence: float = Field(
+        ge=0.0, le=1.0,
+        description="Confidence score for the classification"
+    )
+    evidence: list[str] = Field(
+        default_factory=list,
+        max_length=3,
+        description="Key quotes supporting the classification"
+    )
+    stance: Literal["protectionist", "globalist", "neutral"] = Field(
+        description="Overall trade policy stance"
+    )
+
+# Create agent with typed response
+tariff_classifier = Agent(
+    model=nim_model,
+    result_type=TariffClassification,
+    system_prompt="Classify central bank speeches for tariff and trade policy mentions.",
+)
+
+async def classify_speech(text: str) -> TariffClassification:
+    """Classify a speech - returns strictly typed result."""
+    result = await tariff_classifier.run(text[:4000])
+    return result.data  # Guaranteed to match TariffClassification schema
+```
+
+#### Incorrect Patterns (NEVER USE)
+
+```python
+# WRONG: Manual JSON parsing
+import json
+import re
+
+def classify_speech(text: str) -> dict:  # NEVER - untyped return
+    response = llm.generate(f"Classify: {text}")
+    json_match = re.search(r"\{[^}]+\}", response)
+    if json_match:
+        return json.loads(json_match.group())  # Brittle, no validation
+    return {"mentions_tariff": False}  # Silent fallback
+
+# WRONG: Using raw requests to NIM
+import requests
+
+def classify_speech(text: str) -> dict:  # NEVER
+    response = requests.post(
+        "http://nim:8000/v1/chat/completions",
+        json={"messages": [{"role": "user", "content": text}]},
+    )
+    return response.json()["choices"][0]["message"]["content"]  # Untyped string!
+
+# WRONG: Untyped response model
+class BadClassification(BaseModel):
+    result: dict  # NEVER - loses type information
+    metadata: Any  # NEVER - Any is forbidden
+```
+
+**Rationale**: PydanticAI with strictly-typed models provides:
+- **Guaranteed structured outputs** matching Pydantic schemas
+- **Automatic retries** on validation failures
+- **Complete type safety** through the entire pipeline
+- **OpenAI-compatible API support** for NVIDIA NIM
+- **No manual JSON parsing** - eliminates brittle regex/string manipulation
+- **Runtime validation** - catches malformed LLM responses immediately
+
+### INV-P009: Composition Over Inheritance
+
+Build functionality through composition, not class hierarchies. Use Protocols for interfaces.
+
+```python
+# Correct - composition with protocols
+from typing import Protocol
+
+class Embedder(Protocol):
+    def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        ...
+
+class EmbeddingPipeline:
+    def __init__(
+        self,
+        embedder: Embedder,  # Injected dependency
+        storage: VectorStore,
+    ) -> None:
+        self.embedder = embedder
+        self.storage = storage
+
+    def process(self, texts: list[str]) -> list[str]:
+        embeddings = self.embedder.embed_texts(texts)
+        return self.storage.store(embeddings)
+
+# Incorrect - deep inheritance hierarchy
+class BaseEmbedder:  # NEVER
+    def embed(self): ...
+
+class NIMEmbedder(BaseEmbedder):  # NEVER
+    def embed(self): ...
+
+class BatchNIMEmbedder(NIMEmbedder):  # NEVER - too deep
+    def embed(self): ...
+
+class CachingBatchNIMEmbedder(BatchNIMEmbedder):  # NEVER - way too deep
+    def embed(self): ...
+```
+
+**Rationale**: Composition:
+- Makes dependencies explicit and testable
+- Avoids diamond inheritance problems
+- Enables easy mocking in tests
+- Keeps classes focused on single responsibilities
+
+### INV-P010: Test-Driven Development (TDD)
+
+All new code must be developed using TDD. Write tests BEFORE implementation.
+
+```python
+# Step 1: Write the test first
+# dagster/tests/unit/test_models.py
+class TestSpeechModel:
+    def test_monetary_stance_bounds(self) -> None:
+        """Test monetary_stance must be 1-5."""
+        with pytest.raises(ValidationError):
+            Speech(
+                speech_id="1",
+                title="Test",
+                text="x" * 100,
+                central_bank="FED",
+                monetary_stance=6,  # Invalid
+            )
+
+# Step 2: Run test (should FAIL - Speech doesn't exist yet)
+# Step 3: Write minimal code to pass
+# Step 4: Run test (should PASS)
+# Step 5: Refactor while keeping tests green
+```
+
+**Test requirements:**
+- Unit tests for all Pydantic models
+- Unit tests for all Dagster resources
+- Unit tests for all Dagster assets
+- Integration tests for pipeline flows
+- All external services (NIM, MinIO, LakeFS, Weaviate) must be mocked
+
+```python
+# Correct - mocked external service
+@patch("requests.post")
+def test_embed_texts_success(self, mock_post: Mock) -> None:
+    mock_post.return_value.json.return_value = {
+        "data": [{"embedding": [0.1] * 1024}]
+    }
+    resource = NIMEmbeddingResource(endpoint="http://test:8000")
+    embeddings = resource.embed_texts(["text"])
+    assert len(embeddings[0]) == 1024
+
+# Incorrect - calling real service
+def test_embed_texts_success(self) -> None:  # NEVER
+    resource = NIMEmbeddingResource(
+        endpoint="http://real-nim-service:8000"  # Real service!
+    )
+    embeddings = resource.embed_texts(["text"])  # Network call!
+```
+
+**Rationale**: TDD ensures:
+- All code is testable by design
+- Requirements are captured as executable tests
+- Regressions are caught immediately
+- Tests serve as documentation
+
+### INV-P011: No Bare Generics
+
+Never use bare `list`, `dict`, or `set` without type arguments.
+
+```python
+# Correct - fully specified
+def get_embeddings() -> list[list[float]]:
+    ...
+
+def get_config() -> dict[str, str | int | bool]:
+    ...
+
+results: list[ClassificationResult] = []
+
+# Incorrect - bare generics
+def get_embeddings() -> list:  # NEVER - what's in the list?
+    ...
+
+def get_config() -> dict:  # NEVER - what are the key/value types?
+    ...
+
+results: list = []  # NEVER
+```
+
+**Rationale**: Bare generics provide no type information and make static analysis ineffective.
+
 ---
 
 ## NVIDIA Invariants (INV-N)
@@ -681,4 +1075,4 @@ When discovering new architectural constraints:
 ---
 
 *Created: 2026-01-21*
-*Last Updated: 2026-01-24*
+*Last Updated: 2026-01-25*
