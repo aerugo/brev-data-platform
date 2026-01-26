@@ -26,7 +26,10 @@ image:
 imagePullSecrets:
   - name: ngc-image-pull
 
-replicaCount: 1
+# Set to 0 while nim-reasoning (120B model) needs full GPU
+# The H200 (143GB) can only run one large model at a time
+# Uncomment and set to 1 when switching back to Llama 8B
+replicaCount: 0
 
 # GPU resources - using KAI Scheduler fractional GPU allocation
 # Llama 3.1 8B needs ~16-20GB VRAM, allocating 25GB with headroom

@@ -207,9 +207,13 @@ echo ""
 # =============================================================================
 # Step 5b: Configure GPU Time-Slicing for sharing
 # =============================================================================
-echo "=== Step 5b: Configuring GPU Time-Slicing ==="
+echo "=== Step 5b: Configuring GPU Device Plugin ==="
 
-# Create time-slicing config (allows 4 pods to share each GPU)
+# Create device plugin config (no time-slicing - large models need full GPU)
+# Time-slicing is disabled because:
+# - GPT-OSS 120B model requires ~130GB VRAM (full H200)
+# - Time-slicing minimum is 2 replicas, splitting memory
+# - For multi-model setups with smaller models, uncomment timeSlicing section
 kubectl apply -f - <<EOF
 apiVersion: v1
 kind: ConfigMap
@@ -219,13 +223,15 @@ metadata:
 data:
   config.yaml: |
     version: v1
-    sharing:
-      timeSlicing:
-        renameByDefault: false
-        failRequestsGreaterThanOne: false
-        resources:
-          - name: nvidia.com/gpu
-            replicas: 4
+    # Time-slicing disabled for large models (GPT-OSS 120B needs full GPU)
+    # Uncomment below for multi-model setups with smaller models:
+    # sharing:
+    #   timeSlicing:
+    #     renameByDefault: false
+    #     failRequestsGreaterThanOne: false
+    #     resources:
+    #       - name: nvidia.com/gpu
+    #         replicas: 4
 EOF
 
 # Patch device plugin to use the config (skip if already patched)
@@ -236,14 +242,14 @@ if ! kubectl get daemonset nvidia-device-plugin-daemonset -n kube-system -o json
     {"op": "add", "path": "/spec/template/spec/volumes/-", "value": {"name": "nvidia-config", "configMap": {"name": "nvidia-device-plugin-config", "items": [{"key": "config.yaml", "path": "config.yaml"}]}}}
   ]'
 else
-  echo "Time-slicing patch already applied, skipping..."
+  echo "Device plugin config patch already applied, skipping..."
 fi
 
 # Wait for device plugin to restart
-echo "Waiting for device plugin to restart with time-slicing config..."
+echo "Waiting for device plugin to restart..."
 kubectl rollout status daemonset nvidia-device-plugin-daemonset -n kube-system --timeout=60s
 
-echo "GPU Time-Slicing configured (4 replicas per GPU)!"
+echo "GPU Device Plugin configured (full GPU access for large models)!"
 echo ""
 
 # =============================================================================
