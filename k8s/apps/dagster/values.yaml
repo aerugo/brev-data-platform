@@ -60,8 +60,8 @@ dagster:
       - name: "brev-pipelines"
         image:
           repository: "ghcr.io/aerugo/brev-data-platform/dagster"
-          tag: "latest"
-          pullPolicy: Always
+          tag: "v20260127134836"
+          pullPolicy: Never
         dagsterApiGrpcArgs:
           - "--module-name"
           - "brev_pipelines.definitions"
