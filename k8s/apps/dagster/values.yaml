@@ -59,7 +59,7 @@ dagster:
     deployments:
       - name: "brev-pipelines"
         image:
-          repository: "ghcr.io/aerugo/brev-data-platform/dagster"
+          repository: "ghcr.io/aerugo/brev-dagster-pipelines"
           tag: "latest"
           pullPolicy: Always
         dagsterApiGrpcArgs:
