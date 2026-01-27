@@ -1,0 +1,25 @@
+# RBAC for Dagster to scale NIM deployments in nvidia-ai namespace
+# Required for automatic GPU scaling during embedding/classification jobs
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: dagster-nim-scaler
+  namespace: nvidia-ai
+rules:
+- apiGroups: ["apps"]
+  resources: ["deployments", "deployments/scale"]
+  verbs: ["get", "list", "watch", "patch", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: dagster-nim-scaler
+  namespace: nvidia-ai
+subjects:
+- kind: ServiceAccount
+  name: dagster-dagster-user-deployments-user-deployments
+  namespace: dagster
+roleRef:
+  kind: Role
+  name: dagster-nim-scaler
+  apiGroup: rbac.authorization.k8s.io
