@@ -413,6 +413,23 @@ dagster/
    uv run pytest tests/ -v
    ```
 
+6. **Deploying to production** (see `production-deployment` agent for details):
+
+   **IMPORTANT**: The `dagster/` directory is a Git submodule (`aerugo/brev-dagster-pipelines`).
+   You must push to BOTH repos:
+
+   ```bash
+   # Push submodule changes
+   cd dagster
+   git add . && git commit -m "feat: changes" && git push
+   cd ..
+
+   # Update parent repo pointer
+   git add dagster && git commit -m "Update dagster submodule" && git push
+   ```
+
+   Then force ArgoCD to sync the new image. **NEVER** push images directly to Brev.
+
 ---
 
 ## Asset Patterns

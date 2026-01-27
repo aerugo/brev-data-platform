@@ -418,6 +418,30 @@ Structured data must be stored as Parquet format, not CSV or JSON.
 
 **Rationale**: Parquet provides schema, compression, and columnar access for analytics.
 
+### INV-D004: No Direct Image Push to Brev Instance
+
+Docker images must NEVER be pushed directly to the Brev instance. All images must go through the GitOps pipeline: Git push → GitHub Actions build → GHCR → ArgoCD sync.
+
+```bash
+# CORRECT - GitOps workflow
+git add dagster/
+git commit -m "feat: add new feature"
+git push origin main
+# GitHub Actions builds and pushes to GHCR
+# ArgoCD syncs the new image
+
+# FORBIDDEN - Direct image push
+docker save image | ssh brev-data-platform 'ctr images import -'  # NEVER
+docker push && kubectl rollout restart  # NEVER (bypasses GitOps)
+scp image.tar.gz brev-data-platform:/tmp/  # NEVER
+```
+
+**Rationale**:
+- ArgoCD self-healing will revert manual changes, wasting effort
+- Direct pushes bypass CI/CD checks (tests, linting, security scans)
+- Creates drift between Git state and cluster state
+- Not reproducible - no audit trail of what was deployed
+
 ---
 
 ## Pipeline Invariants (INV-P)

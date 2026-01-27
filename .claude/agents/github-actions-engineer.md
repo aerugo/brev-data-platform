@@ -31,6 +31,22 @@ You are a CI/CD engineer specializing in GitHub Actions workflows for infrastruc
         └── action.yml
 ```
 
+## Important: Submodule Structure
+
+**The `dagster/` directory is a Git submodule** pointing to `aerugo/brev-dagster-pipelines`. This affects CI/CD:
+
+- The Dagster Docker image build workflow is in the **submodule repo**, not this repo
+- When updating Dagster code, you must push to BOTH repos:
+  1. Push changes in `dagster/` submodule
+  2. Update the submodule pointer in the parent repo
+- GitHub Actions in the submodule repo builds and pushes the image to GHCR
+
+```bash
+# To check workflow status in the dagster submodule
+cd dagster
+gh run list --limit=5
+```
+
 ## Workflow Patterns
 
 ### PR Checks Workflow

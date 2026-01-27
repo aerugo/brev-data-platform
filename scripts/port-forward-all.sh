@@ -1,5 +1,6 @@
 #!/bin/bash
 # Port forward all services with SSH tunnel management and health checks
+# Automatically handles Brev login, instance discovery, and tunnel setup
 set -e
 
 # Colors
@@ -60,30 +61,153 @@ print_header() {
     echo ""
 }
 
-check_ssh_tunnel() {
-    echo -e "${YELLOW}[1/4] Checking SSH tunnel...${NC}"
+cleanup_existing() {
+    echo -e "${YELLOW}[1/6] Cleaning up existing connections...${NC}"
 
-    if pgrep -f "ssh.*6443:127.0.0.1:6443.*${INSTANCE_NAME}" > /dev/null 2>&1; then
-        echo -e "  ${GREEN}✓${NC} SSH tunnel already running"
-        return 0
+    # Kill existing SSH tunnels to the instance
+    if pkill -f "ssh.*6443:127.0.0.1:6443" 2>/dev/null; then
+        echo -e "  ${GREEN}✓${NC} Killed existing SSH tunnel"
+    else
+        echo -e "  ${CYAN}○${NC} No existing SSH tunnel found"
     fi
+
+    # Kill existing kubectl port-forward processes
+    if pkill -f "kubectl port-forward" 2>/dev/null; then
+        echo -e "  ${GREEN}✓${NC} Killed existing kubectl port-forwards"
+    else
+        echo -e "  ${CYAN}○${NC} No existing port-forwards found"
+    fi
+
+    # Free up specific ports we need
+    local ports=(8080 8000 3000 8001 9001 8002 8003 3001 9090 6443)
+    for port in "${ports[@]}"; do
+        if lsof -ti :"$port" &>/dev/null; then
+            lsof -ti :"$port" | xargs kill 2>/dev/null || true
+        fi
+    done
+
+    sleep 1
+    echo -e "  ${GREEN}✓${NC} Cleanup complete"
+}
+
+check_brev_login() {
+    echo -e "${YELLOW}[2/6] Checking Brev authentication...${NC}"
+
+    # Check if brev is logged in by trying to list instances
+    if ! brev ls &>/dev/null; then
+        echo -e "  ${YELLOW}→${NC} Not logged in, running 'brev login'..."
+        if ! brev login; then
+            echo -e "  ${RED}✗${NC} Brev login failed"
+            return 1
+        fi
+    fi
+
+    echo -e "  ${GREEN}✓${NC} Brev authenticated"
+    return 0
+}
+
+check_brev_instance() {
+    echo -e "${YELLOW}[3/6] Checking Brev instance...${NC}"
+
+    # Get instance status
+    local instance_info
+    instance_info=$(brev ls 2>/dev/null | grep -E "^\s*${INSTANCE_NAME}\s+" || true)
+
+    if [[ -z "$instance_info" ]]; then
+        echo -e "  ${RED}✗${NC} Instance '${INSTANCE_NAME}' not found"
+        echo -e "  ${YELLOW}→${NC} Available instances:"
+        brev ls 2>/dev/null | tail -n +2 | head -10
+        return 1
+    fi
+
+    # Check if instance is running
+    local status
+    status=$(echo "$instance_info" | awk '{print $2}')
+
+    if [[ "$status" != "RUNNING" ]]; then
+        echo -e "  ${YELLOW}→${NC} Instance status: $status"
+        echo -e "  ${YELLOW}→${NC} Starting instance..."
+        if ! brev start "$INSTANCE_NAME"; then
+            echo -e "  ${RED}✗${NC} Failed to start instance"
+            return 1
+        fi
+        # Wait for instance to be running
+        echo -e "  ${YELLOW}→${NC} Waiting for instance to be ready..."
+        for i in {1..60}; do
+            sleep 5
+            instance_info=$(brev ls 2>/dev/null | grep -E "^\s*${INSTANCE_NAME}\s+" || true)
+            status=$(echo "$instance_info" | awk '{print $2}')
+            if [[ "$status" == "RUNNING" ]]; then
+                break
+            fi
+            echo -e "  ${YELLOW}○${NC} Status: $status (waiting...)"
+        done
+
+        if [[ "$status" != "RUNNING" ]]; then
+            echo -e "  ${RED}✗${NC} Instance failed to reach RUNNING state"
+            return 1
+        fi
+    fi
+
+    echo -e "  ${GREEN}✓${NC} Instance '${INSTANCE_NAME}' is running"
+    return 0
+}
+
+refresh_ssh_config() {
+    echo -e "${YELLOW}[4/6] Refreshing SSH configuration...${NC}"
+
+    # Run brev refresh to update SSH config with current instance IP
+    if ! brev refresh &>/dev/null; then
+        echo -e "  ${YELLOW}!${NC} Warning: 'brev refresh' returned non-zero, but may still work"
+    fi
+
+    # Verify SSH config exists and has the instance
+    if [[ ! -f "$SSH_CONFIG" ]]; then
+        echo -e "  ${RED}✗${NC} SSH config not found: $SSH_CONFIG"
+        return 1
+    fi
+
+    if ! grep -q "Host ${INSTANCE_NAME}" "$SSH_CONFIG"; then
+        echo -e "  ${RED}✗${NC} Instance not found in SSH config"
+        echo -e "  ${YELLOW}→${NC} Try running 'brev refresh' manually"
+        return 1
+    fi
+
+    echo -e "  ${GREEN}✓${NC} SSH configuration updated"
+    return 0
+}
+
+check_ssh_tunnel() {
+    echo -e "${YELLOW}[5/6] Setting up SSH tunnel...${NC}"
 
     echo -e "  ${YELLOW}→${NC} Starting SSH tunnel..."
 
-    # Kill any stale tunnels first
-    pkill -f "ssh.*6443:127.0.0.1:6443" 2>/dev/null || true
-    sleep 1
-
     # Start new tunnel
-    ssh -F "$SSH_CONFIG" -N -L 6443:127.0.0.1:6443 "${INSTANCE_NAME}-host" &
+    ssh -F "$SSH_CONFIG" -o ConnectTimeout=30 -o ServerAliveInterval=30 -o ServerAliveCountMax=3 \
+        -N -L 6443:127.0.0.1:6443 "${INSTANCE_NAME}-host" 2>/dev/null &
     SSH_PID=$!
     PIDS+=("$SSH_PID")
 
     # Wait for tunnel to establish
-    for i in {1..10}; do
+    for i in {1..15}; do
         if nc -z localhost 6443 2>/dev/null; then
             echo -e "  ${GREEN}✓${NC} SSH tunnel established"
             return 0
+        fi
+        # Check if SSH process died
+        if ! kill -0 "$SSH_PID" 2>/dev/null; then
+            echo -e "  ${RED}✗${NC} SSH tunnel process died"
+            echo -e "  ${YELLOW}→${NC} Retrying with verbose output..."
+            # Retry with some debug info
+            ssh -F "$SSH_CONFIG" -o ConnectTimeout=30 -v -N -L 6443:127.0.0.1:6443 "${INSTANCE_NAME}-host" 2>&1 | head -20 &
+            SSH_PID=$!
+            PIDS+=("$SSH_PID")
+            sleep 5
+            if nc -z localhost 6443 2>/dev/null; then
+                echo -e "  ${GREEN}✓${NC} SSH tunnel established on retry"
+                return 0
+            fi
+            return 1
         fi
         sleep 1
     done
@@ -93,7 +217,7 @@ check_ssh_tunnel() {
 }
 
 check_cluster() {
-    echo -e "${YELLOW}[2/4] Verifying cluster connectivity...${NC}"
+    echo -e "${YELLOW}[6/6] Verifying cluster connectivity...${NC}"
 
     # Check if kubeconfig file exists
     if [[ ! -f "$KUBECONFIG_FILE" ]]; then
@@ -104,22 +228,24 @@ check_cluster() {
 
     export KUBECONFIG="$KUBECONFIG_FILE"
 
-    if ! kubectl cluster-info &>/dev/null; then
-        echo -e "  ${RED}✗${NC} Cannot connect to cluster"
-        echo -e "  ${YELLOW}→${NC} SSH tunnel may not be ready, retrying..."
-        sleep 2
-        if ! kubectl cluster-info &>/dev/null; then
-            echo -e "  ${RED}✗${NC} Still cannot connect"
-            return 1
+    # Try connecting with retries
+    for attempt in {1..5}; do
+        if kubectl cluster-info &>/dev/null; then
+            echo -e "  ${GREEN}✓${NC} Cluster accessible (using $KUBECONFIG_FILE)"
+            return 0
         fi
-    fi
+        if [[ $attempt -lt 5 ]]; then
+            echo -e "  ${YELLOW}○${NC} Connection attempt $attempt failed, retrying..."
+            sleep 2
+        fi
+    done
 
-    echo -e "  ${GREEN}✓${NC} Cluster accessible (using $KUBECONFIG_FILE)"
-    return 0
+    echo -e "  ${RED}✗${NC} Cannot connect to cluster after 5 attempts"
+    return 1
 }
 
 start_port_forwards() {
-    echo -e "${YELLOW}[3/4] Starting port forwards...${NC}"
+    echo -e "${YELLOW}Starting port forwards...${NC}"
 
     export KUBECONFIG="$KUBECONFIG_FILE"
 
@@ -153,7 +279,7 @@ start_port_forwards() {
 }
 
 verify_services() {
-    echo -e "${YELLOW}[4/4] Verifying service accessibility...${NC}"
+    echo -e "${YELLOW}Verifying service accessibility...${NC}"
     echo ""
 
     # Wait a moment for all port-forwards to stabilize
@@ -268,9 +394,21 @@ main() {
         exit 1
     fi
 
+    if ! command -v brev &>/dev/null; then
+        echo -e "${RED}Error: 'brev' CLI is required but not installed${NC}"
+        echo -e "${YELLOW}Install with: curl -fsSL https://brev.sh/install.sh | bash${NC}"
+        exit 1
+    fi
+
     # Run setup steps
+    cleanup_existing
+    check_brev_login || exit 1
+    check_brev_instance || exit 1
+    refresh_ssh_config || exit 1
     check_ssh_tunnel || exit 1
     check_cluster || exit 1
+
+    echo ""
     start_port_forwards
     verify_services
     show_credentials
