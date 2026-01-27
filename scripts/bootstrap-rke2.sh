@@ -209,11 +209,12 @@ echo ""
 # =============================================================================
 echo "=== Step 5b: Configuring GPU Device Plugin ==="
 
-# Create device plugin config (no time-slicing - large models need full GPU)
-# Time-slicing is disabled because:
-# - GPT-OSS 120B model requires ~130GB VRAM (full H200)
-# - Time-slicing minimum is 2 replicas, splitting memory
-# - For multi-model setups with smaller models, uncomment timeSlicing section
+# Create device plugin config with 2-way time-slicing
+# Time-slicing is TEMPORAL sharing, NOT memory partitioning:
+# - All workloads see the full GPU memory (143GB on H200)
+# - Workloads take turns executing on the GPU (context switching)
+# - nim-reasoning (120B, ~131GB) + nim-embedding (~3GB) = ~134GB < 143GB
+# - Both can coexist in memory; time-slicing handles compute scheduling
 kubectl apply -f - <<EOF
 apiVersion: v1
 kind: ConfigMap
@@ -223,15 +224,12 @@ metadata:
 data:
   config.yaml: |
     version: v1
-    # Time-slicing disabled for large models (GPT-OSS 120B needs full GPU)
-    # Uncomment below for multi-model setups with smaller models:
-    # sharing:
-    #   timeSlicing:
-    #     renameByDefault: false
-    #     failRequestsGreaterThanOne: false
-    #     resources:
-    #       - name: nvidia.com/gpu
-    #         replicas: 4
+    sharing:
+      timeSlicing:
+        renameByDefault: false
+        resources:
+          - name: nvidia.com/gpu
+            replicas: 2
 EOF
 
 # Patch device plugin to use the config (skip if already patched)
@@ -249,7 +247,7 @@ fi
 echo "Waiting for device plugin to restart..."
 kubectl rollout status daemonset nvidia-device-plugin-daemonset -n kube-system --timeout=60s
 
-echo "GPU Device Plugin configured (full GPU access for large models)!"
+echo "GPU Device Plugin configured with 2-way time-slicing!"
 echo ""
 
 # =============================================================================
