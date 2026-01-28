@@ -19,8 +19,37 @@ From `docs/invariants/INVARIANTS.md`:
 
 - **INV-G003**: Source of Truth is Git - Never make manual kubectl changes
 - **INV-G002**: Automated sync with self-heal for dev environment
+- **INV-G004**: Container image names must match CI output - For submodules, use the submodule repo name
 - **INV-I005**: Configuration as Code - No manual steps
 - **INV-D001**: Never push Docker images directly to the Brev instance
+
+## CRITICAL: Submodule Container Image References
+
+**When configuring Helm values for a submodule (like `dagster/`), the image repository MUST match where CI actually pushes.**
+
+For the dagster submodule:
+- CI workflow is in `aerugo/brev-dagster-pipelines` repo
+- CI uses `IMAGE_NAME: ${{ github.repository }}` which becomes `aerugo/brev-dagster-pipelines`
+- CI pushes to: `ghcr.io/aerugo/brev-dagster-pipelines:latest`
+
+**CORRECT** - Helm values must reference the CI output:
+```yaml
+# k8s/apps/dagster/values.yaml
+image:
+  repository: "ghcr.io/aerugo/brev-dagster-pipelines"  # Matches CI output
+  tag: "latest"
+```
+
+**WRONG** - This image doesn't exist:
+```yaml
+image:
+  repository: "ghcr.io/aerugo/brev-data-platform/dagster"  # CI never pushes here!
+```
+
+**When adding new submodules:**
+1. Check the submodule's `.github/workflows/*.yml` to find `IMAGE_NAME`
+2. Verify where images actually get pushed (usually `ghcr.io/${{ github.repository }}`)
+3. Ensure Helm values reference the actual CI output, not an assumed path
 
 ## The Deployment Workflow
 

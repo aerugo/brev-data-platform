@@ -362,7 +362,30 @@ kubectl scale deployment dagster --replicas=3  # NEVER
 
 **Rationale**: Manual changes cause drift and will be reverted by ArgoCD sync.
 
-### INV-G004: Sync Waves for Dependencies
+### INV-G004: Container Image Names Match CI Output
+
+Helm values must reference the container image repository that CI actually pushes to. For Git submodules with their own CI/CD, this is the submodule's repository name (e.g., `ghcr.io/<org>/<submodule-repo>`), NOT the parent repository path.
+
+```yaml
+# Correct - matches CI output from aerugo/brev-dagster-pipelines repo
+image:
+  repository: "ghcr.io/aerugo/brev-dagster-pipelines"  # CI pushes here
+  tag: "latest"
+
+# Incorrect - imaginary path that doesn't exist
+image:
+  repository: "ghcr.io/aerugo/brev-data-platform/dagster"  # CI never pushes here!
+  tag: "latest"
+```
+
+**Key rule**: When a component lives in a Git submodule:
+1. Check the submodule's `.github/workflows/*.yml` to see where images are pushed
+2. The image name typically follows `ghcr.io/${{ github.repository }}` which resolves to the submodule's repo, not the parent
+3. Update Helm values to match the actual CI output
+
+**Rationale**: Mismatched image references cause deployments to use stale images indefinitely, with no errors - just old code running.
+
+### INV-G005: Sync Waves for Dependencies
 
 Applications with dependencies must use sync waves to ensure correct ordering.
 
