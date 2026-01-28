@@ -123,7 +123,7 @@ env:
   # NIM_KVCACHE_PERCENT controls what fraction of remaining GPU memory goes to KV cache
   # NIM_RELAX_MEM_CONSTRAINTS allows startup with other models sharing the GPU
   - name: NIM_KVCACHE_PERCENT
-    value: "0.50"
+    value: "0.70"
   - name: NIM_RELAX_MEM_CONSTRAINTS
     value: "1"
   - name: NIM_MAX_MODEL_LEN
