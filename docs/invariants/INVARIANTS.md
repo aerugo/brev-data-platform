@@ -1040,27 +1040,32 @@ synthesis_columns = ["reference", "text"]  # text is ~20K chars - TOO LONG
 
 ### INV-N007: Safe Synthesizer GPU Preemption
 
-Safe Synthesizer must use `batch-high` priority (130) to preempt NIM inference pods (priority 125). After synthesis completes, scale deployment back to 0 replicas to release GPU for NIM.
+Safe Synthesizer training jobs must use `batch-high` priority (130) to automatically preempt NIM inference pods (priority 125). **NEVER scale GPU workloads manually** - always rely on priority-based preemption.
 
 ```yaml
-# Safe Synthesizer deployment
+# Safe Synthesizer training job (created by core-controller)
 priorityClassName: batch-high  # 130 - preempts inference (125)
+
+# NIM deployments
+priorityClassName: inference   # 125 - can be preempted by batch-high
 ```
 
 ```python
-# Correct - automatic scale up/down in Dagster resource
-def synthesize(self, ...):
-    self._scale_deployment(replicas=1)   # KAI preempts NIM
-    try:
-        return self._synthesize_via_api(...)
-    finally:
-        self._scale_deployment(replicas=0)  # NIM auto-restarts
+# CORRECT - let priority preemption handle GPU scheduling
+# The core-controller creates jobs with batch-high priority
+# They automatically preempt inference workloads when needed
 
-# Incorrect - leaving Safe Synth running blocks NIM
-# Never leave Safe Synthesizer at replicas=1 after job completion
+# FORBIDDEN - manual scaling breaks GitOps and causes race conditions
+kubectl scale deployment nim-reasoning --replicas=0  # NEVER
+kubectl scale deployment nim-llm --replicas=0        # NEVER
 ```
 
-**Rationale**: Safe Synthesizer requires ~80GB GPU memory. NIM and Safe Synth cannot run concurrently on H200 (141GB) when both need full GPU. Priority-based preemption via KAI Scheduler enables time-sharing.
+**Priority Class Requirements:**
+- `batch-high` (130): Safe Synthesizer training jobs, batch workloads that need GPU
+- `inference` (125): NIM LLM, NIM reasoning, NIM embedding - can be preempted
+- `train` (50): Low-priority training - preempted by everything
+
+**Rationale**: Manual scaling creates race conditions, breaks GitOps (ArgoCD reverts), and is not reproducible. Priority preemption is automatic, auditable, and self-healing.
 
 ### INV-N008: Synthetic Data Isolation
 

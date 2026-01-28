@@ -259,7 +259,28 @@ kubectl apply -f local-changes.yaml  # FORBIDDEN
 
 # NEVER bypass the CI/CD pipeline
 docker push ghcr.io/aerugo/brev-data-platform/dagster:latest  # WITHOUT Git push first
+
+# NEVER manually scale GPU workloads - use priority preemption instead
+kubectl scale deployment nim-reasoning --replicas=0  # FORBIDDEN
+kubectl scale deployment nim-llm --replicas=0        # FORBIDDEN
+kubectl scale deployment nvidia-safe-synth-safe-synthesizer --replicas=1  # FORBIDDEN
 ```
+
+### GPU Workload Scheduling
+
+GPU workloads use **priority-based preemption**, not manual scaling:
+
+- `batch-high` (130): Safe Synthesizer jobs - highest priority batch work
+- `inference` (125): NIM deployments - can be preempted by batch-high
+- `train` (50): Low-priority training
+
+When a Safe Synthesizer job needs GPU, the core-controller creates a job with `batch-high` priority. The Kubernetes scheduler automatically preempts lower-priority inference workloads. When the job completes, inference workloads automatically restart.
+
+**Why no manual scaling:**
+1. ArgoCD will revert manual changes (self-heal)
+2. Creates race conditions between manual actions and automated systems
+3. Not reproducible or auditable
+4. Breaks the GitOps model
 
 ## Quick Reference Commands
 

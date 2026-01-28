@@ -8,13 +8,13 @@
 #
 # TIME-SHARING GPU STRATEGY:
 # - nim-reasoning defaults to 0 replicas (off)
-# - Scale to 1 replica when reasoning is needed
-# - Uses batch-high priority (130) to preempt nim-llm (125)
-# - When nim-reasoning scales down, nim-llm auto-restarts
+# - Dagster's K8sScalerResource scales it up when reasoning is needed
+# - Uses inference priority (125) - can be preempted by batch-high (130)
+# - Safe Synthesizer jobs (batch-high) automatically preempt when needed
+# - When nim-reasoning scales down or is preempted, nim-llm auto-restarts
 #
-# Usage:
-#   kubectl scale deployment nim-reasoning -n nvidia-ai --replicas=1  # Enable
-#   kubectl scale deployment nim-reasoning -n nvidia-ai --replicas=0  # Disable
+# IMPORTANT: Never scale manually! Use Dagster's K8sScalerResource or
+# let priority preemption handle GPU scheduling automatically.
 #
 # IMPORTANT: Requires NGC secrets applied first:
 #   ./scripts/apply-secrets.sh
@@ -57,9 +57,10 @@ podLabels:
   kai.scheduler/queue: inference-queue
   model-type: reasoning
 
-# Priority class - batch-high (130) to preempt nim-llm (inference, 125)
-# When scaled up, nim-reasoning preempts nim-llm for GPU access
-priorityClassName: batch-high
+# Priority class - inference (125) for NIM workloads
+# This allows Safe Synthesizer jobs (batch-high, 130) to preempt when needed
+# nim-reasoning can still preempt nim-llm since they're at same priority (FIFO)
+priorityClassName: inference
 
 # KAI Scheduler annotations for GPU allocation
 # GPT-OSS-120B needs full GPU access for NIM profile detection
