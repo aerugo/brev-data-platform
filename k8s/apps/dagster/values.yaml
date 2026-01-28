@@ -51,10 +51,11 @@ dagster:
               limits:
                 memory: 4Gi
                 cpu: 2000m
-          podSpecConfig:
-            envSecrets:
-              - name: dagster-env-secrets
-              - name: nds-credentials
+            envFrom:
+              - secretRef:
+                  name: dagster-env-secrets
+              - secretRef:
+                  name: nds-credentials
 
   # User code deployments with custom image from GHCR
   dagster-user-deployments:
