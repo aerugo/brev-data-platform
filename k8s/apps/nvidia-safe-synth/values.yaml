@@ -22,6 +22,10 @@ global:
   imagePullSecrets:
     - name: ngc-image-pull
 
+# Disable Ingress — service is accessed internally via ClusterIP
+ingress:
+  enabled: false
+
 # Core platform configuration
 core:
   config:
