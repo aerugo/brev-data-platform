@@ -36,7 +36,7 @@ spec:
       overQuotaWeight: 1
     # Total GPU available (quota counts GPU requests, not physical GPUs)
     gpu:
-      quota: 3      # Allow 3 fractional GPU requests on 1 H200
+      quota: 4      # Allow 4 fractional GPU requests on 1 H200 (time-slicing replicas=4)
       limit: -1
       overQuotaWeight: 1
     # Total memory available for GPU workloads

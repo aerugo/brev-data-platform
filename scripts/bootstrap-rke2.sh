@@ -213,8 +213,8 @@ echo "=== Step 5b: Configuring GPU Device Plugin ==="
 # Time-slicing is TEMPORAL sharing, NOT memory partitioning:
 # - All workloads see the full GPU memory (143GB on H200)
 # - Workloads take turns executing on the GPU (context switching)
-# - nim-reasoning (120B, ~131GB) + nim-embedding (~3GB) = ~134GB < 143GB
-# - Both can coexist in memory; time-slicing handles compute scheduling
+# - 4 replicas: nim-llm (25Gi) + nim-embedding (2Gi) + nim-reasoning (80Gi) + safe-synth (40Gi)
+# - Not all 4 run simultaneously (147Gi > 141Gi), but Dagster orchestrates scaling
 kubectl apply -f - <<EOF
 apiVersion: v1
 kind: ConfigMap
@@ -229,7 +229,7 @@ data:
         renameByDefault: false
         resources:
           - name: nvidia.com/gpu
-            replicas: 2
+            replicas: 4
 EOF
 
 # Patch device plugin to use the config (skip if already patched)
