@@ -862,6 +862,32 @@ results: list = []  # NEVER
 
 **Rationale**: Bare generics provide no type information and make static analysis ineffective.
 
+### INV-P012: LakeFS IO Manager for Asset Persistence
+
+All Dagster assets that produce DataFrames must use `io_manager_key="lakefs_parquet"` for automatic persistence to LakeFS. This ensures data survives pod restarts and provides versioning.
+
+```python
+# Correct - uses LakeFS IO manager
+@asset(
+    description="My data product",
+    group_name="my_group",
+    io_manager_key="lakefs_parquet",  # REQUIRED for persistence
+)
+def my_asset(upstream: pl.DataFrame) -> pl.DataFrame:
+    return processed_df  # IO manager writes to LakeFS
+
+# Incorrect - no persistence specified
+@asset
+def my_asset() -> pl.DataFrame:
+    return df  # Lost on pod restart! Uses ephemeral filesystem storage
+```
+
+**Rationale**: The default filesystem IO manager stores to ephemeral pod storage (`/opt/dagster/dagster_home/storage/`) that doesn't survive pod restarts. LakeFS IO manager ensures:
+- Data versioning with commit history
+- Persistence across pod restarts
+- Automatic Parquet serialization
+- Branch-aware storage for trial/production separation
+
 ---
 
 ## NVIDIA Invariants (INV-N)
@@ -1099,4 +1125,4 @@ When discovering new architectural constraints:
 ---
 
 *Created: 2026-01-21*
-*Last Updated: 2026-01-25*
+*Last Updated: 2026-01-28*

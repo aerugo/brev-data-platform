@@ -26,6 +26,7 @@ From `docs/invariants/INVARIANTS.md`:
 - **INV-P001**: Assets over ops - use `@asset` for data transformations
 - **INV-P002**: I/O managers for storage - no direct storage calls in assets
 - **INV-P003**: Type annotations on all assets
+- **INV-P012**: LakeFS IO manager for persistence - all DataFrame assets must use `io_manager_key="lakefs_parquet"`
 - **INV-D002**: All data through LakeFS - never write directly to MinIO
 - **INV-D003**: Parquet for structured data
 
@@ -434,6 +435,36 @@ dagster/
 
 ## Asset Patterns
 
+### LakeFS IO Manager for Persistence (REQUIRED - INV-P012)
+
+**All assets producing DataFrames MUST use `io_manager_key="lakefs_parquet"`** for automatic persistence to LakeFS. This ensures data survives pod restarts.
+
+```python
+from dagster import asset, AssetExecutionContext
+import polars as pl
+
+# CORRECT: Uses LakeFS IO manager for persistence
+@asset(
+    description="My data product",
+    group_name="my_group",
+    io_manager_key="lakefs_parquet",  # REQUIRED for persistence
+)
+def my_asset(upstream: pl.DataFrame) -> pl.DataFrame:
+    """Process data - IO manager handles LakeFS storage."""
+    return processed_df  # IO manager writes to LakeFS automatically
+
+# INCORRECT: Missing io_manager_key - data lost on pod restart!
+@asset(
+    description="My data product",
+    group_name="my_group",
+    # io_manager_key missing - uses ephemeral filesystem storage!
+)
+def my_asset(upstream: pl.DataFrame) -> pl.DataFrame:
+    return df  # LOST on pod restart - stored to /opt/dagster/storage/
+```
+
+**Why this matters**: The default filesystem IO manager stores to ephemeral pod storage. When pods restart (deployments, crashes, scaling), all materialized assets are lost. The LakeFS IO manager persists to versioned storage.
+
 ### Basic Asset with Pydantic Types
 
 ```python
@@ -449,7 +480,7 @@ class CleaningMetrics(BaseModel):
 
 @asset(
     description="Cleaned customer data",
-    io_manager_key="lakefs_parquet_io_manager",
+    io_manager_key="lakefs_parquet",  # REQUIRED for persistence
     group_name="customers",
 )
 def clean_customers(
@@ -674,7 +705,8 @@ Before completing any task:
 ### Code Quality
 - [ ] No deep inheritance (composition preferred)
 - [ ] Google-style docstrings on all public functions/classes
-- [ ] Assets use I/O managers, not direct storage calls
+- [ ] **All DataFrame assets have `io_manager_key="lakefs_parquet"`** (INV-P012)
+- [ ] No direct LakeFS/MinIO writes in asset code (IO manager handles persistence)
 - [ ] Resources use `ConfigurableResource` (Pydantic-based)
 - [ ] No hardcoded credentials (use `EnvVar`)
 
