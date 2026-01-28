@@ -97,6 +97,21 @@ safe-synthesizer:
     timeoutSeconds: 5
     failureThreshold: 6
 
+# Data Store (Gitea) configuration for dataset management
+# This stores datasets used by Safe Synthesizer
+data-store:
+  enabled: true
+
+  # Admin user configuration
+  # NOTE: The chart's init script has a bug where password sync doesn't set
+  # --must-change-password=false, breaking API tokens on pod restart.
+  # We work around this with a post-sync Job (see templates/nds-admin-fix-job.yaml)
+  gitea:
+    admin:
+      username: datastore_admin
+      password: s3aJPHD9!bt6d0I
+      email: datastore@local.domain
+
 # PostgreSQL for job persistence (included in chart)
 postgresql:
   enabled: true

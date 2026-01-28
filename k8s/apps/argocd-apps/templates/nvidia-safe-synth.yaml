@@ -18,7 +18,7 @@ metadata:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
-  # Multiple sources: NGC Helm chart + values from our repo
+  # Multiple sources: NGC Helm chart + values + config patches from our repo
   sources:
     - repoURL: https://helm.ngc.nvidia.com/nvidia/nemo-microservices
       chart: nemo-microservices-helm-chart
@@ -29,15 +29,25 @@ spec:
     - repoURL: https://github.com/aerugo/brev-data-platform.git
       targetRevision: main
       ref: values
+    # Raw manifests to patch Helm chart bugs (e.g., must-change-password fix)
+    - repoURL: https://github.com/aerugo/brev-data-platform.git
+      targetRevision: main
+      path: k8s/apps/nvidia-safe-synth/manifests
   destination:
     server: https://kubernetes.default.svc
     namespace: nvidia-ai
   # Allow Dagster to control replica count without ArgoCD reverting
+  # Also ignore ConfigMap data differences since we patch the init script
   ignoreDifferences:
     - group: apps
       kind: Deployment
       jsonPointers:
         - /spec/replicas
+    - group: ""
+      kind: ConfigMap
+      name: nvidia-safe-synth-data-store-init
+      jsonPointers:
+        - /data
   syncPolicy:
     automated:
       prune: true
