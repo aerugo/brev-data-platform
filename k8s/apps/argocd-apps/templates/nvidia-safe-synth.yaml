@@ -37,17 +37,11 @@ spec:
     server: https://kubernetes.default.svc
     namespace: nvidia-ai
   # Allow Dagster to control replica count without ArgoCD reverting
-  # Also ignore ConfigMap data differences since we patch the init script
   ignoreDifferences:
     - group: apps
       kind: Deployment
       jsonPointers:
         - /spec/replicas
-    - group: ""
-      kind: ConfigMap
-      name: nvidia-safe-synth-data-store-init
-      jsonPointers:
-        - /data
   syncPolicy:
     automated:
       prune: true

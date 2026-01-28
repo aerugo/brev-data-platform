@@ -1,0 +1,82 @@
+# Post-sync Job to fix NDS admin user must-change-password flag
+# This runs after the data-store pod is ready and ensures the admin user
+# doesn't have the must-change-password flag set, which would break API tokens.
+#
+# This is a workaround for a bug in the NVIDIA nemo-microservices Helm chart
+# where the configure_gitea.sh init script calls `gitea admin user change-password`
+# without --must-change-password=false on existing users.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: nds-admin-fix
+  namespace: nvidia-ai
+  labels:
+    app: nds-admin-fix
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  ttlSecondsAfterFinished: 600
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: Never
+      serviceAccountName: gitea
+      containers:
+        - name: fix-admin
+          image: nvcr.io/nvidia/nemo-microservices/datastore:25.12
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -e
+              echo "Waiting for data-store to be ready..."
+
+              # Wait for Gitea to be accessible
+              for i in $(seq 1 30); do
+                if gitea admin user list --admin > /dev/null 2>&1; then
+                  echo "Gitea is ready"
+                  break
+                fi
+                echo "Waiting for Gitea... ($i/30)"
+                sleep 5
+              done
+
+              echo "Fixing admin user must-change-password flag..."
+
+              # Change password with must-change-password=false
+              # This ensures the admin user can use API tokens without being forced to change password
+              gitea admin user change-password \
+                --username "${GITEA_ADMIN_USERNAME}" \
+                --password "${GITEA_ADMIN_PASSWORD}" \
+                --must-change-password=false
+
+              echo "Admin user fixed successfully!"
+          env:
+            - name: GITEA_APP_INI
+              value: /data/gitea/conf/app.ini
+            - name: GITEA_CUSTOM
+              value: /data/gitea
+            - name: GITEA_WORK_DIR
+              value: /data
+            - name: GITEA_TEMP
+              value: /tmp/gitea
+            - name: HOME
+              value: /data/gitea/git
+            - name: GITEA_ADMIN_USERNAME
+              value: datastore_admin
+            - name: GITEA_ADMIN_PASSWORD
+              value: s3aJPHD9!bt6d0I
+          volumeMounts:
+            - mountPath: /tmp
+              name: temp
+            - mountPath: /data
+              name: data
+      volumes:
+        - name: temp
+          emptyDir: {}
+        - name: data
+          persistentVolumeClaim:
+            claimName: datastore-shared-storage
+      imagePullSecrets:
+        - name: ngc-image-pull
