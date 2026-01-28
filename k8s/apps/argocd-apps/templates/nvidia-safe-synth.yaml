@@ -2,8 +2,8 @@
 # Uses NVIDIA's official NeMo Microservices Helm Chart from NGC
 # Sync Wave 3: AI Layer
 #
-# NOTE: ignoreDifferences allows Dagster to scale replicas without ArgoCD reverting.
-# The SafeSynthesizerResource scales 0->1 for synthesis, then back to 0.
+# NOTE: ignoreDifferences ignores Helm-generated secrets (random values on each render)
+# and the WaitForFirstConsumer PVC that stays Pending until a jobstep pod uses it.
 #
 # Chart: nemo-microservices-helm-chart from NGC
 # Only safe-synthesizer tag is enabled (not the full platform)
@@ -36,12 +36,16 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: nvidia-ai
-  # Allow Dagster to control replica count without ArgoCD reverting
+  # Helm chart generates random secret values on each render — ignore data drift
   ignoreDifferences:
-    - group: apps
-      kind: Deployment
+    - kind: Secret
+      name: nvidia-safe-synth-data-store--lfs-jwt
       jsonPointers:
-        - /spec/replicas
+        - /data
+    - kind: Secret
+      name: nvidia-safe-synth-postgresql
+      jsonPointers:
+        - /data
   syncPolicy:
     automated:
       prune: true
