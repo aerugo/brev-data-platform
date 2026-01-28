@@ -21,7 +21,8 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: nvidia-ai
-  # Allow manual scaling for GPU time-sharing without ArgoCD reverting
+  # Allow Dagster-managed scaling without ArgoCD reverting
+  # Dagster scales nim-reasoning 0→1 for LLM work, then back to 0 for embeddings
   ignoreDifferences:
     - group: apps
       kind: Deployment
@@ -33,3 +34,4 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
+      - RespectIgnoreDifferences=true
