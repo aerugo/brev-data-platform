@@ -11,13 +11,15 @@
 #   - Llama 8B (nim-llm): 25Gi KAI annotation
 #   - Safe Synth TinyLlama 1.1B: 40Gi KAI annotation
 #   - Embedding (nim-embedding): 2Gi KAI annotation
-#   - Concurrent total: 67Gi << 141Gi available
-#   - GPT-OSS-120B (nim-reasoning): 141Gi (full GPU, preempts all)
+#   - GPT-OSS-120B (nim-reasoning): 80Gi KAI annotation
+#   - Default concurrent (no reasoning): 67Gi << 141Gi
+#   - With reasoning (no safe-synth): 80 + 25 + 2 = 107Gi < 141Gi
+#   - All four: 80 + 25 + 40 + 2 = 147Gi > 141Gi (cannot coexist)
 #
 # GPU Orchestration Strategy:
-# - nim-llm + Safe Synth + nim-embedding coexist in inference-queue via fractional GPU
-# - nim-reasoning preempts all when scaled up (on-demand only)
-# - Safe Synthesizer is always-on (no manual scaling)
+# - nim-llm + Safe Synth + nim-embedding coexist via fractional GPU (67Gi)
+# - nim-reasoning coexists with nim-llm + nim-embedding (107Gi)
+# - Dagster scales safe-synth down when nim-reasoning scales up (and vice versa)
 ---
 apiVersion: scheduling.run.ai/v2
 kind: Queue

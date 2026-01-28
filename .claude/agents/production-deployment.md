@@ -260,7 +260,7 @@ kubectl apply -f local-changes.yaml  # FORBIDDEN
 # NEVER bypass the CI/CD pipeline
 docker push ghcr.io/aerugo/brev-data-platform/dagster:latest  # WITHOUT Git push first
 
-# NEVER manually scale GPU workloads - use priority preemption instead
+# NEVER manually scale GPU workloads via kubectl
 kubectl scale deployment nim-reasoning --replicas=0  # FORBIDDEN
 kubectl scale deployment nim-llm --replicas=0        # FORBIDDEN
 kubectl scale deployment nvidia-safe-synth-safe-synthesizer --replicas=1  # FORBIDDEN
@@ -268,19 +268,20 @@ kubectl scale deployment nvidia-safe-synth-safe-synthesizer --replicas=1  # FORB
 
 ### GPU Workload Scheduling
 
-GPU workloads use **priority-based preemption**, not manual scaling:
+GPU workloads use **Dagster-managed scaling** for nim-reasoning and KAI fractional coexistence for everything else:
 
-- `batch-high` (130): Safe Synthesizer jobs - highest priority batch work
-- `inference` (125): NIM deployments - can be preempted by batch-high
-- `train` (50): Low-priority training
+- nim-llm (25Gi) + safe-synth (40Gi) + nim-embedding (2Gi) = 67Gi — coexist always
+- nim-reasoning (80Gi) is scaled on-demand by Dagster's `K8sScalerResource`
+- Dagster scales safe-synth to 0 before scaling nim-reasoning up (80+25+40+2=147 > 141)
+- Dagster restores safe-synth to 1 when nim-reasoning scales back to 0
 
-When a Safe Synthesizer job needs GPU, the core-controller creates a job with `batch-high` priority. The Kubernetes scheduler automatically preempts lower-priority inference workloads. When the job completes, inference workloads automatically restart.
-
-**Why no manual scaling:**
+**Why no manual kubectl scaling:**
 1. ArgoCD will revert manual changes (self-heal)
 2. Creates race conditions between manual actions and automated systems
 3. Not reproducible or auditable
 4. Breaks the GitOps model
+
+**Dagster programmatic scaling via K8sScalerResource is the intended mechanism** — it provides graceful transitions without mid-request timeouts, unlike priority preemption.
 
 ## Quick Reference Commands
 

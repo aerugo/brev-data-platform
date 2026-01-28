@@ -50,8 +50,8 @@ spec:
         - /data
     - kind: PersistentVolumeClaim
       name: nvidia-safe-synth-core-job-storage
-      jsonPointers:
-        - /spec/accessModes
+      jqPathExpressions:
+        - .spec.accessModes
   syncPolicy:
     automated:
       prune: true

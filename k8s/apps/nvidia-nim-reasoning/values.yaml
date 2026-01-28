@@ -6,15 +6,16 @@
 # - Configurable reasoning effort (low/medium/high)
 # - 128K context window
 #
-# TIME-SHARING GPU STRATEGY:
+# DAGSTER-MANAGED GPU SCALING:
 # - nim-reasoning defaults to 0 replicas (off)
 # - Dagster's K8sScalerResource scales it up when reasoning is needed
-# - Uses inference priority (125) - can be preempted by batch-high (130)
-# - Safe Synthesizer jobs (batch-high) automatically preempt when needed
-# - When nim-reasoning scales down or is preempted, nim-llm auto-restarts
+# - Dagster scales down safe-synth before scaling up nim-reasoning
+#   (80Gi + 25Gi + 40Gi + 2Gi = 147Gi > 141Gi available)
+# - nim-reasoning coexists with nim-llm + nim-embedding (80 + 25 + 2 = 107Gi)
+# - When nim-reasoning scales down, Dagster restores safe-synth to 1
 #
-# IMPORTANT: Never scale manually! Use Dagster's K8sScalerResource or
-# let priority preemption handle GPU scheduling automatically.
+# IMPORTANT: Never scale manually via kubectl! All scaling is managed
+# by Dagster's K8sScalerResource for graceful transitions.
 #
 # IMPORTANT: Requires NGC secrets applied first:
 #   ./scripts/apply-secrets.sh
@@ -29,12 +30,12 @@ image:
 imagePullSecrets:
   - name: ngc-image-pull
 
-# Default to 0 - scale up on demand to preempt nim-llm
+# Default to 0 - Dagster scales up on demand (scaling down safe-synth first)
 replicaCount: 0
 
-# GPU resources - uses full GPU when running (time-sharing, not fractional)
-# GPT-OSS-120B needs ~80GB VRAM (MoE with MXFP4 quantization)
-# NIM allocates full GPU memory, so this preempts nim-llm when scaled up
+# GPU resources - GPT-OSS-120B MoE with MXFP4 quantization
+# Needs ~80GB VRAM; coexists with nim-llm (25Gi) + nim-embedding (2Gi)
+# Cannot coexist with safe-synth simultaneously (107 + 40 = 147 > 141)
 resources:
   requests:
     memory: 96Gi
@@ -58,15 +59,13 @@ podLabels:
   model-type: reasoning
 
 # Priority class - inference (125) for NIM workloads
-# This allows Safe Synthesizer jobs (batch-high, 130) to preempt when needed
-# nim-reasoning can still preempt nim-llm since they're at same priority (FIFO)
 priorityClassName: inference
 
 # KAI Scheduler annotations for GPU allocation
-# GPT-OSS-120B needs full GPU access for NIM profile detection
-# H200 has 141GB; request full capacity so NIM sees the complete GPU
+# GPT-OSS-120B MoE needs ~80Gi with MXFP4 quantization (TP=1)
+# 80Gi allows coexistence with nim-llm (25Gi) + nim-embedding (2Gi) = 107Gi total
 podAnnotations:
-  kai.scheduler.nvidia.com/gpu-memory: "141Gi"
+  kai.scheduler.nvidia.com/gpu-memory: "80Gi"
 
 # Tolerations for GPU nodes
 tolerations:
