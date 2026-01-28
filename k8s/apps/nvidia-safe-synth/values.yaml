@@ -2,15 +2,11 @@
 # Uses official NVIDIA nemo-microservices-helm-chart from NGC
 # https://docs.nvidia.com/nemo/microservices/latest/generate-private-synthetic-data/
 #
-# TIME-SHARING GPU STRATEGY:
-# - safe-synth defaults to 0 replicas (off)
-# - Scale to 1 replica when synthetic data generation is needed
-# - Uses batch-high priority (130) to preempt nim-llm (125)
-# - When safe-synth scales down, nim-llm auto-restarts
-#
-# Usage:
-#   kubectl scale deployment nemo-safe-synthesizer -n nvidia-ai --replicas=1  # Enable
-#   kubectl scale deployment nemo-safe-synthesizer -n nvidia-ai --replicas=0  # Disable
+# CO-INFERENCE GPU STRATEGY:
+# - safe-synth runs always-on (replicaCount=1) alongside nim-llm
+# - KAI fractional GPU allocation: safe-synth 40Gi + nim-llm 25Gi = 65Gi << 141Gi H200
+# - Both services coexist in inference-queue
+# - No manual scaling needed (fixes INV-N007, INV-G003)
 
 # Only install Safe Synthesizer, not full platform
 tags:
@@ -35,8 +31,8 @@ core:
 
 # Safe Synthesizer configuration
 safe-synthesizer:
-  # Default to 0 replicas - scale up on demand
-  replicaCount: 0
+  # Always-on: coexists with nim-llm via KAI fractional GPU allocation
+  replicaCount: 1
 
   # Service name matches what Dagster expects
   serviceName: nemo-safe-synthesizer
@@ -57,12 +53,12 @@ safe-synthesizer:
 
   # Pod labels for KAI scheduler
   podLabels:
-    kai.scheduler/queue: batch-queue
-    workload-type: batch
+    kai.scheduler/queue: inference-queue
+    workload-type: inference
 
   # Pod annotations for KAI GPU memory allocation
   podAnnotations:
-    kai.scheduler.nvidia.com/gpu-memory: "80Gi"
+    kai.scheduler.nvidia.com/gpu-memory: "40Gi"
 
   # Service configuration
   service:
