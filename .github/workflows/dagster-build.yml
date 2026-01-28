@@ -10,7 +10,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}/dagster
+  IMAGE_NAME: aerugo/brev-dagster-pipelines
 
 jobs:
   build:
