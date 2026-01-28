@@ -51,6 +51,10 @@ dagster:
               limits:
                 memory: 4Gi
                 cpu: 2000m
+          podSpecConfig:
+            envSecrets:
+              - name: dagster-env-secrets
+              - name: nds-credentials
 
   # User code deployments with custom image from GHCR
   dagster-user-deployments:
@@ -81,7 +85,7 @@ dagster:
           - name: NDS_ENDPOINT
             value: "http://nemo-data-store.nvidia-ai.svc.cluster.local:3000"
           - name: NDS_REPO
-            value: "admin/central-bank-speeches"
+            value: "default/central-bank-speeches"
           # Safe Synthesizer configuration
           - name: SAFE_SYNTH_ENDPOINT
             value: "http://nemo-safe-synthesizer.nvidia-ai.svc.cluster.local:8000"
