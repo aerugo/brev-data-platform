@@ -32,6 +32,26 @@ core:
     platform:
       # Disable service account auth for easier API access
       enable_service_account_auth: false
+    # Job executor config - set priority class for GPU preemption (INV-N007)
+    jobs:
+      executors:
+        - profile: default
+          backend: kubernetes_job
+          provider: gpu
+          config:
+            priority_class_name: batch-high
+            storage:
+              pvc_name: nvidia-safe-synth-core-job-storage
+              volume_permissions_image: busybox
+            logging:
+              enabled: true
+              configmap: nvidia-safe-synth-core-jobs-logsidecar
+              image:
+                repository: fluent/fluent-bit
+                tag: "4.0.7"
+            ttl_seconds_after_finished: 10800
+            image_pull_secrets:
+              - name: ngc-image-pull
 
 # Safe Synthesizer configuration
 safe-synthesizer:
