@@ -29,6 +29,13 @@ core:
       # Disable service account auth for easier API access
       enable_service_account_auth: false
 
+  # Job storage PVC — chart defaults to ReadWriteMany (requires NFS).
+  # Single-node cluster only has local-path (ReadWriteOnce).
+  storage:
+    accessModes:
+      - ReadWriteOnce
+    size: 50Gi
+
 # Safe Synthesizer configuration
 safe-synthesizer:
   # Always-on: coexists with nim-llm via KAI fractional GPU allocation
