@@ -119,10 +119,15 @@ env:
   # OpenTelemetry service name
   - name: OTEL_SERVICE_NAME
     value: "nim-reasoning"
-  # Limit GPU memory to match KAI annotation (80Gi / 141Gi ≈ 0.57)
-  # Without this, vLLM defaults to 0.9 and grabs ~126GiB, blocking other models
-  - name: VLLM_GPU_MEMORY_UTILIZATION
-    value: "0.60"
+  # Limit GPU memory to match KAI annotation (~80Gi of 141Gi)
+  # NIM_KVCACHE_PERCENT controls what fraction of remaining GPU memory goes to KV cache
+  # NIM_RELAX_MEM_CONSTRAINTS allows startup with other models sharing the GPU
+  - name: NIM_KVCACHE_PERCENT
+    value: "0.50"
+  - name: NIM_RELAX_MEM_CONSTRAINTS
+    value: "1"
+  - name: NIM_MAX_MODEL_LEN
+    value: "16384"
 
 # Model cache persistence
 # GPT-OSS-120B model weights are ~60GB quantized

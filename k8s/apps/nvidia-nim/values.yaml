@@ -117,10 +117,13 @@ env:
   # OpenTelemetry service name (for distributed tracing if Tempo enabled later)
   - name: OTEL_SERVICE_NAME
     value: "nim-llm"
-  # Limit GPU memory to match KAI annotation (25Gi / 141Gi ≈ 0.18)
-  # Without this, vLLM defaults to 0.9 and grabs ~126GiB, blocking other models
-  - name: VLLM_GPU_MEMORY_UTILIZATION
-    value: "0.20"
+  # Limit GPU memory to match KAI annotation (~25Gi of 141Gi)
+  # Without these, NIM grabs ~90% of GPU memory, blocking other models
+  # NIM_MAX_MODEL_LEN reduces KV cache; NIM_KVCACHE_PERCENT caps cache allocation
+  - name: NIM_MAX_MODEL_LEN
+    value: "4096"
+  - name: NIM_KVCACHE_PERCENT
+    value: "0.15"
 
 # Model cache persistence
 # GPT-OSS 120B is ~60GB quantized
