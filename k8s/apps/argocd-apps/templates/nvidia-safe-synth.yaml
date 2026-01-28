@@ -36,7 +36,9 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: nvidia-ai
-  # Helm chart generates random secret values on each render — ignore data drift
+  # Ignore diffs that cause perpetual OutOfSync:
+  # - Secrets: Helm generates random values on each render
+  # - PVC: Chart specifies ReadWriteMany but we patch to ReadWriteOnce (no NFS)
   ignoreDifferences:
     - kind: Secret
       name: nvidia-safe-synth-data-store--lfs-jwt
@@ -46,6 +48,10 @@ spec:
       name: nvidia-safe-synth-postgresql
       jsonPointers:
         - /data
+    - kind: PersistentVolumeClaim
+      name: nvidia-safe-synth-core-job-storage
+      jsonPointers:
+        - /spec/accessModes
   syncPolicy:
     automated:
       prune: true
