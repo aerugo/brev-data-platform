@@ -39,6 +39,8 @@ spec:
   # Ignore diffs that cause perpetual OutOfSync:
   # - Secrets: Helm generates random values on each render
   # - PVC: Chart specifies ReadWriteMany but we patch to ReadWriteOnce (no NFS)
+  # - Deployment replicas: Dagster scales safe-synth down during nim-reasoning phases
+  #   (80Gi + 25Gi + 40Gi + 2Gi = 147Gi > 141Gi available on H200)
   ignoreDifferences:
     - kind: Secret
       name: nvidia-safe-synth-data-store--lfs-jwt
@@ -52,6 +54,11 @@ spec:
       name: nvidia-safe-synth-core-job-storage
       jqPathExpressions:
         - .spec.accessModes
+    - group: apps
+      kind: Deployment
+      name: nvidia-safe-synth-safe-synthesizer
+      jqPathExpressions:
+        - .spec.replicas
   syncPolicy:
     automated:
       prune: true
