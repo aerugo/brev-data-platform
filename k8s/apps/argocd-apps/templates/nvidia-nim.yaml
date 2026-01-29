@@ -18,9 +18,18 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: nvidia-ai
+  # Ignore replica diffs: Dagster scales nim-llm to 0 during Safe Synthesizer
+  # synthesis (INV-N004: nim-llm 25Gi + safe-synth 40Gi must coexist on H200 141Gi)
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      name: nim-llm
+      jqPathExpressions:
+        - .spec.replicas
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
+      - RespectIgnoreDifferences=true

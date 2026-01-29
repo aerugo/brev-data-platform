@@ -117,6 +117,10 @@ env:
   # OpenTelemetry service name (for distributed tracing if Tempo enabled later)
   - name: OTEL_SERVICE_NAME
     value: "nim-llm"
+  # Force vLLM backend - TensorRT-LLM ignores NIM_KVCACHE_PERCENT and
+  # grabs ~90% GPU memory (97 GiB on H200), blocking Safe Synthesizer jobs
+  - name: NIM_LLM_ENGINE
+    value: "vllm"
   # Limit GPU memory to match KAI annotation (~25Gi of 141Gi)
   # Without these, NIM grabs ~90% of GPU memory, blocking other models
   # NIM_MAX_MODEL_LEN reduces KV cache; NIM_KVCACHE_PERCENT caps cache allocation
