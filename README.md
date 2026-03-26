@@ -3,6 +3,7 @@
 GPU-accelerated data platform on NVIDIA Brev with RKE2, KAI Scheduler, ArgoCD, Dagster, LakeFS, MinIO, and NVIDIA AI Enterprise.
 
 [![Watch the video](https://media.licdn.com/dms/image/v2/D4D22AQF6fDvuXiaVEw/feedshare-shrink_800/B4DZwgmqcEIUAk-/0/1770073532477?e=2147483647&v=beta&t=lPOmeJLR_CTsqw4HSNGEDikPQJQL29S0CP3U7etLa7Y)](https://screen.studio/share/Fg1ZYPZT)
+**Watch the tutorial video**
 
 ## Overview
 
